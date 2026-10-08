@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { UserProfile, PeajeStock } from '@/types/database';
 import { UserPlus, Shield, UserCheck, UserX, AlertCircle, CheckCircle2, RefreshCw, Key, Info, Edit, X, Save, MapPin } from 'lucide-react';
+import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 
 const LOCAL_USERS_KEY = 'telepase_registered_user_profiles';
 
@@ -65,29 +66,18 @@ export default function UserManagement() {
   const [editRol, setEditRol] = useState<'Administrador' | 'Operador'>('Operador');
   const [editPuntoEntrega, setEditPuntoEntrega] = useState<string>('Santa Ana');
 
-  // Cargar Puntos de Entrega dinámicos
+  // Cargar Puntos de Entrega dinámicos desde el maestro
   const loadDeliveryPoints = async () => {
-    let points: string[] = [];
-    const stored = localStorage.getItem('telepase_local_delivery_points');
-    if (stored) {
-      try {
-        const list: PeajeStock[] = JSON.parse(stored);
-        if (list.length > 0) points = list.map((p) => p.estacion);
-      } catch {}
-    }
-
-    try {
-      const { data } = await supabase.from('peaje_stock').select('estacion');
-      if (data && data.length > 0) {
-        const remoteNames = data.map((d) => d.estacion);
-        points = Array.from(new Set([...points, ...remoteNames]));
-      }
-    } catch {}
-
-    const defaultList = ['Santa Ana', 'Colonia Victoria', 'Paraje Fachinal', 'Ituzaingó'];
-    const finalList = Array.from(new Set([...defaultList, ...points]));
-    setDeliveryPoints(finalList);
+    const masterList = await getMasterDeliveryPoints();
+    const names = masterList.map((p) => p.estacion);
+    setDeliveryPoints(names);
   };
+
+  useEffect(() => {
+    const handleUpdated = () => loadDeliveryPoints();
+    window.addEventListener('delivery_points_updated', handleUpdated);
+    return () => window.removeEventListener('delivery_points_updated', handleUpdated);
+  }, []);
 
   const fetchUsers = async () => {
     setLoading(true);

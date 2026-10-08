@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase';
 import { TagBatch, UserSession } from '@/types/database';
 import { Layers, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Calendar, Receipt } from 'lucide-react';
 
+import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
+
 const LOCAL_BATCHES_KEY = 'telepase_local_tag_batches';
 
 interface BatchManagementProps {
@@ -29,42 +31,24 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
   const [cantidadInput, setCantidadInput] = useState<string>('');
   const [observaciones, setObservaciones] = useState<string>('');
 
-  const [deliveryPoints, setDeliveryPoints] = useState<string[]>([
-    'Santa Ana',
-    'Colonia Victoria',
-    'Paraje Fachinal',
-    'Ituzaingó',
-  ]);
+  const [deliveryPoints, setDeliveryPoints] = useState<string[]>([]);
 
-  // Cargar Puntos de Entrega dinámicos
+  // Cargar Puntos de Entrega dinámicos desde el maestro
   useEffect(() => {
     const loadPoints = async () => {
-      let points: string[] = [];
-      const stored = localStorage.getItem('telepase_local_delivery_points');
-      if (stored) {
-        try {
-          const list = JSON.parse(stored);
-          if (Array.isArray(list) && list.length > 0) {
-            points = list.map((p: any) => p.estacion);
-          }
-        } catch {}
-      }
-
-      try {
-        const { data } = await supabase.from('peaje_stock').select('estacion');
-        if (data && data.length > 0) {
-          const remoteNames = data.map((d) => d.estacion);
-          points = Array.from(new Set([...points, ...remoteNames]));
-        }
-      } catch {}
-
-      if (points.length > 0) {
-        setDeliveryPoints(points);
-        setEstacion(points[0]);
+      const masterList = await getMasterDeliveryPoints();
+      const names = masterList.map((p) => p.estacion);
+      setDeliveryPoints(names);
+      if (names.length > 0) {
+        setEstacion((prev) => prev || names[0]);
       }
     };
 
     loadPoints();
+
+    const handleUpdated = () => loadPoints();
+    window.addEventListener('delivery_points_updated', handleUpdated);
+    return () => window.removeEventListener('delivery_points_updated', handleUpdated);
   }, []);
 
   // Recalcular cantidad estimada automáticamente cuando cambian los seriales

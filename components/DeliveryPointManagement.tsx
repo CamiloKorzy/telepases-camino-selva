@@ -1,20 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { PeajeStock } from '@/types/database';
+import { getMasterDeliveryPoints, saveMasterDeliveryPoint } from '@/lib/deliveryPoints';
 import { MapPin, Plus, Save, AlertCircle, CheckCircle, RefreshCw, Edit2, ShieldAlert } from 'lucide-react';
 
 interface DeliveryPointManagementProps {
   onPointUpdated?: () => void;
 }
-
-const DEFAULT_POINTS: PeajeStock[] = [
-  { estacion: 'Santa Ana', stock_recibido: 1000, stock_entregado: 0, stock_minimo_alerta: 100 },
-  { estacion: 'Colonia Victoria', stock_recibido: 1000, stock_entregado: 0, stock_minimo_alerta: 100 },
-  { estacion: 'Paraje Fachinal', stock_recibido: 1000, stock_entregado: 0, stock_minimo_alerta: 100 },
-  { estacion: 'Ituzaingó', stock_recibido: 1000, stock_entregado: 0, stock_minimo_alerta: 100 },
-];
 
 export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPointManagementProps) {
   const [points, setPoints] = useState<PeajeStock[]>([]);
@@ -28,48 +21,20 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
   const [stockMinimo, setStockMinimo] = useState<number>(100);
   const [editingStation, setEditingStation] = useState<string | null>(null);
 
-  // Cargar Puntos de Entrega
+  // Cargar Puntos de Entrega del Maestro
   const fetchPoints = async () => {
     setLoading(true);
-    let remotePoints: PeajeStock[] = [];
-
-    // Try Supabase
-    try {
-      const { data, error } = await supabase.from('peaje_stock').select('*');
-      if (!error && data && data.length > 0) {
-        remotePoints = data;
-      }
-    } catch {}
-
-    // Try Local Storage
-    let localPoints: PeajeStock[] = [];
-    const stored = localStorage.getItem('telepase_local_delivery_points');
-    if (stored) {
-      try {
-        localPoints = JSON.parse(stored);
-      } catch {}
-    }
-
-    // Combine or fallback to defaults
-    const combinedMap = new Map<string, PeajeStock>();
-
-    // Initial defaults
-    DEFAULT_POINTS.forEach((p) => combinedMap.set(p.estacion, p));
-
-    // Local override
-    localPoints.forEach((p) => combinedMap.set(p.estacion, p));
-
-    // Remote override
-    remotePoints.forEach((p) => combinedMap.set(p.estacion, p));
-
-    const finalPoints = Array.from(combinedMap.values());
-    setPoints(finalPoints);
-    localStorage.setItem('telepase_local_delivery_points', JSON.stringify(finalPoints));
+    const masterPoints = await getMasterDeliveryPoints();
+    setPoints(masterPoints);
     setLoading(false);
   };
 
   useEffect(() => {
     fetchPoints();
+
+    const handleUpdated = () => fetchPoints();
+    window.addEventListener('delivery_points_updated', handleUpdated);
+    return () => window.removeEventListener('delivery_points_updated', handleUpdated);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,7 +51,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
     const existing = points.find((p) => p.estacion.toLowerCase() === stationName.toLowerCase());
 
     if (!editingStation && existing) {
-      setMessage({ text: `El Punto de Entrega "${stationName}" ya existe en el sistema.`, type: 'error' });
+      setMessage({ text: `El Punto de Entrega "${stationName}" ya existe en el maestro.`, type: 'error' });
       setSubmitting(false);
       return;
     }
@@ -99,18 +64,8 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
       updated_at: new Date().toISOString(),
     };
 
-    // Save in Supabase
-    try {
-      await supabase.from('peaje_stock').upsert([newPoint], { onConflict: 'estacion' });
-    } catch {}
-
-    // Save in LocalStorage
-    const updatedPoints = editingStation
-      ? points.map((p) => (p.estacion === editingStation ? newPoint : p))
-      : [...points, newPoint];
-
+    const updatedPoints = await saveMasterDeliveryPoint(newPoint);
     setPoints(updatedPoints);
-    localStorage.setItem('telepase_local_delivery_points', JSON.stringify(updatedPoints));
 
     setMessage({
       text: editingStation
@@ -157,7 +112,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
           <button
             onClick={fetchPoints}
             className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
-            title="Recargar Puntos de Entrega"
+            title="Recargar Puntos de Entrega del Maestro"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cs-primary' : ''}`} />
           </button>
@@ -248,11 +203,11 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
         </form>
       </div>
 
-      {/* Tabla de Puntos de Entrega Registrados */}
+      {/* Tabla de Puntos de Entrega Registrados en el Maestro */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
         <h3 className="font-bold text-base text-slate-900 flex items-center space-x-2">
           <MapPin className="w-4 h-4 text-cs-primary" />
-          <span>Puntos de Entrega Registrados ({points.length})</span>
+          <span>Maestro de Puntos de Entrega Registrados ({points.length})</span>
         </h3>
 
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
@@ -272,7 +227,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
               {points.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-6 text-center text-slate-400">
-                    No hay Puntos de Entrega registrados.
+                    No hay Puntos de Entrega registrados en el Maestro.
                   </td>
                 </tr>
               ) : (

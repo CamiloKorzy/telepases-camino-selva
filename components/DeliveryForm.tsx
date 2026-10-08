@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagDelivery, UserSession, TagBatch, PeajeStock } from '@/types/database';
+import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 import { QrCode, CheckCircle2, AlertCircle, Save, Car, Camera, CameraOff, Zap, User } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -34,35 +35,23 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
   ]);
 
   useEffect(() => {
-    // Cargar Puntos de Entrega dinámicos
     const loadPoints = async () => {
-      let points: string[] = [];
-      const stored = localStorage.getItem('telepase_local_delivery_points');
-      if (stored) {
-        try {
-          const list: PeajeStock[] = JSON.parse(stored);
-          if (list.length > 0) points = list.map((p) => p.estacion);
-        } catch {}
-      }
+      const masterList = await getMasterDeliveryPoints();
+      const names = masterList.map((p) => p.estacion);
+      setDeliveryPoints(names);
 
-      try {
-        const { data } = await supabase.from('peaje_stock').select('estacion');
-        if (data && data.length > 0) {
-          const remoteNames = data.map((d) => d.estacion);
-          points = Array.from(new Set([...points, ...remoteNames]));
-        }
-      } catch {}
-
-      if (points.length > 0) {
-        setDeliveryPoints(points);
-        const assignedPoint = currentUser.punto_entrega && currentUser.punto_entrega !== 'Todos'
-          ? currentUser.punto_entrega
-          : points[0];
-        setFormData((prev) => ({ ...prev, estacion: assignedPoint }));
-      }
+      const assignedPoint = currentUser.punto_entrega && currentUser.punto_entrega !== 'Todos'
+        ? currentUser.punto_entrega
+        : names[0] || 'Santa Ana';
+      
+      setFormData((prev) => ({ ...prev, estacion: assignedPoint }));
     };
 
     loadPoints();
+
+    const handleUpdated = () => loadPoints();
+    window.addEventListener('delivery_points_updated', handleUpdated);
+    return () => window.removeEventListener('delivery_points_updated', handleUpdated);
   }, [currentUser]);
 
   const [loading, setLoading] = useState(false);

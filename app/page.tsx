@@ -9,13 +9,14 @@ import LoginForm from '@/components/LoginForm';
 import UserManagement from '@/components/UserManagement';
 import BatchManagement from '@/components/BatchManagement';
 import DeliveryPointManagement from '@/components/DeliveryPointManagement';
+import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin } from 'lucide-react';
 
 export default function AntigravityDashboard() {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
   const [deliveries, setDeliveries] = useState<TagDelivery[]>([]);
   const [stocks, setStocks] = useState<PeajeStock[]>([]);
-  const [availableStations, setAvailableStations] = useState<string[]>(['Santa Ana', 'Colonia Victoria', 'Paraje Fachinal', 'Ituzaingó']);
+  const [availableStations, setAvailableStations] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<string>('Todas');
   const [loading, setLoading] = useState(true);
@@ -46,7 +47,6 @@ export default function AntigravityDashboard() {
     setLoading(true);
     let remoteDeliveries: TagDelivery[] = [];
     let localDeliveries: TagDelivery[] = [];
-    let remoteStock: PeajeStock[] = [];
     let localBatches: TagBatch[] = [];
 
     // 1. Obtener entregas de Supabase
@@ -82,20 +82,10 @@ export default function AntigravityDashboard() {
     );
     setDeliveries(allDeliveries);
 
-    // 3. Obtener stock y Puntos de Entrega registrados
-    try {
-      const { data: stockData } = await supabase.from('peaje_stock').select('*');
-      if (stockData) remoteStock = stockData;
-    } catch {}
-
-    // Puntos de Entrega locales
-    let localPoints: PeajeStock[] = [];
-    const storedPoints = localStorage.getItem('telepase_local_delivery_points');
-    if (storedPoints) {
-      try {
-        localPoints = JSON.parse(storedPoints);
-      } catch {}
-    }
+    // 3. Obtener Maestro Oficial de Puntos de Entrega
+    const masterPoints = await getMasterDeliveryPoints();
+    const stationNamesList = masterPoints.map((p) => p.estacion);
+    setAvailableStations(stationNamesList);
 
     // Lotes cargados localmente
     const storedBatches = localStorage.getItem('telepase_local_tag_batches');
@@ -105,28 +95,9 @@ export default function AntigravityDashboard() {
       } catch {}
     }
 
-    const defaultStations = ['Santa Ana', 'Colonia Victoria', 'Paraje Fachinal', 'Ituzaingó'];
-    
-    // Obtener lista completa de nombres de Puntos de Entrega
-    const stationNamesSet = new Set<string>([
-      ...defaultStations,
-      ...localPoints.map((p) => p.estacion),
-      ...remoteStock.map((s) => s.estacion),
-      ...allDeliveries.map((d) => d.estacion),
-    ]);
-
-    const stationNamesList = Array.from(stationNamesSet);
-    setAvailableStations(stationNamesList);
-
-    const finalStocks: PeajeStock[] = stationNamesList.map((st) => {
-      const foundRemote = remoteStock.find((s) => s.estacion === st);
-      const foundLocal = localPoints.find((p) => p.estacion === st);
-      
-      const baseRecibido = foundRemote
-        ? foundRemote.stock_recibido
-        : foundLocal
-        ? foundLocal.stock_recibido
-        : 1000;
+    const finalStocks: PeajeStock[] = masterPoints.map((pt) => {
+      const st = pt.estacion;
+      const baseRecibido = pt.stock_recibido;
       
       // Sumar recibido de lotes
       const lotesEstacion = localBatches.filter((b) => b.estacion === st);
@@ -135,17 +106,11 @@ export default function AntigravityDashboard() {
       // Entregados en este Punto de Entrega
       const entregadosEstacion = allDeliveries.filter((d) => d.estacion === st).length;
 
-      const minimoAlerta = foundRemote
-        ? foundRemote.stock_minimo_alerta
-        : foundLocal
-        ? foundLocal.stock_minimo_alerta
-        : 100;
-
       return {
         estacion: st,
         stock_recibido: baseRecibido + extraRecibido,
         stock_entregado: entregadosEstacion,
-        stock_minimo_alerta: minimoAlerta,
+        stock_minimo_alerta: pt.stock_minimo_alerta,
       };
     });
 
@@ -160,6 +125,10 @@ export default function AntigravityDashboard() {
       }
       fetchData();
     }
+
+    const handleUpdated = () => fetchData();
+    window.addEventListener('delivery_points_updated', handleUpdated);
+    return () => window.removeEventListener('delivery_points_updated', handleUpdated);
   }, [userSession]);
 
   const handleLogout = () => {
