@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagDelivery, UserSession, TagBatch, PeajeStock } from '@/types/database';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
-import { QrCode, CheckCircle2, AlertCircle, Save, Car, Camera, CameraOff, Zap, User } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { CheckCircle2, AlertCircle, Save, Car, User } from 'lucide-react';
 
 interface DeliveryFormProps {
   currentUser: UserSession;
@@ -56,91 +55,6 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [lastScannedTag, setLastScannedTag] = useState<string | null>(null);
-
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const dniInputRef = useRef<HTMLInputElement | null>(null);
-
-  const playBeep = () => {
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.15);
-    } catch {
-      // Ignorar si el navegador restringe audio
-    }
-  };
-
-  useEffect(() => {
-    let html5Qrcode: Html5Qrcode | null = null;
-
-    if (isScanning) {
-      setCameraError(null);
-      html5Qrcode = new Html5Qrcode('reader');
-      scannerRef.current = html5Qrcode;
-
-      const config = {
-        fps: 10,
-        qrbox: { width: 260, height: 160 },
-        aspectRatio: 1.333333,
-      };
-
-      html5Qrcode
-        .start(
-          { facingMode: 'environment' },
-          config,
-          (decodedText) => {
-            const serialLimpio = decodedText.trim().toUpperCase();
-            setFormData((prev) => ({ ...prev, tag_serial: serialLimpio }));
-            setLastScannedTag(serialLimpio);
-            playBeep();
-
-            if (typeof navigator !== 'undefined' && navigator.vibrate) {
-              navigator.vibrate(200);
-            }
-
-            if (html5Qrcode && html5Qrcode.isScanning) {
-              html5Qrcode
-                .stop()
-                .then(() => {
-                  setIsScanning(false);
-                  setTimeout(() => {
-                    dniInputRef.current?.focus();
-                  }, 100);
-                })
-                .catch(() => setIsScanning(false));
-            } else {
-              setIsScanning(false);
-            }
-          },
-          () => {}
-        )
-        .catch((err) => {
-          console.error('Error iniciando cámara:', err);
-          setCameraError('No se pudo acceder a la cámara. Permita el acceso en su navegador.');
-          setIsScanning(false);
-        });
-    }
-
-    return () => {
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.stop().catch(() => {});
-      }
-    };
-  }, [isScanning]);
-
-  const toggleScanner = () => {
-    setIsScanning((prev) => !prev);
-  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -152,18 +66,16 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
   // Función de validación de Lotes Habilitados por Estación
   const isTagInEnabledBatch = (serial: string, stationName: string): boolean => {
-    // 1. Obtener lotes desde localStorage y Supabase
     const stored = localStorage.getItem('telepase_local_tag_batches');
-    if (!stored) return true; // Si aún no se registran lotes, se permite para flexibilidad inicial
+    if (!stored) return true;
 
     try {
       const batches: TagBatch[] = JSON.parse(stored);
       const stationBatches = batches.filter((b) => b.estacion === stationName);
-      if (stationBatches.length === 0) return true; // Si la estación no tiene lotes cargados aún
+      if (stationBatches.length === 0) return true;
 
       const serialNum = parseInt(serial.replace(/\D/g, ''), 10);
 
-      // Verificar si el TAG cae dentro de alguno de los lotes habilitados
       return stationBatches.some((b) => {
         const numDesde = parseInt(b.serial_desde.replace(/\D/g, ''), 10);
         const numHasta = parseInt(b.serial_hasta.replace(/\D/g, ''), 10);
@@ -172,7 +84,6 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           return serialNum >= numDesde && serialNum <= numHasta;
         }
 
-        // Comparación alfanumérica fallback
         return serial >= b.serial_desde && serial <= b.serial_hasta;
       });
     } catch {
@@ -245,7 +156,6 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(updatedDeliveries));
 
     setMessage({ type: 'success', text: `¡TAG ${tagClean} registrado exitosamente para ${formData.dominio}!` });
-    setLastScannedTag(null);
     
     setFormData((prev) => ({
       ...prev,
@@ -275,64 +185,6 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       </div>
 
       <div className="p-5 space-y-4">
-        {/* ESCÁNER DE CÁMARA */}
-        <div className="bg-cs-dark text-white p-4 rounded-2xl border border-cs-primary/30 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Camera className="w-5 h-5 text-cs-accent" />
-              <span className="font-bold text-xs uppercase tracking-wider text-slate-200">Escáner de TAG RFID</span>
-            </div>
-            <button
-              type="button"
-              onClick={toggleScanner}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
-                isScanning
-                  ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                  : 'bg-cs-accent hover:bg-cs-light text-cs-dark shadow-md'
-              }`}
-            >
-              {isScanning ? (
-                <>
-                  <CameraOff className="w-4 h-4" />
-                  <span>Cerrar Cámara</span>
-                </>
-              ) : (
-                <>
-                  <Camera className="w-4 h-4" />
-                  <span>ABRIR CÁMARA</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Visor de la cámara */}
-          {isScanning && (
-            <div className="relative rounded-xl overflow-hidden bg-black border-2 border-cs-accent">
-              <div id="reader" className="w-full max-h-72"></div>
-              <div className="p-2 text-center bg-cs-dark/90 text-emerald-300 text-xs font-medium border-t border-cs-primary/40">
-                Apunta la cámara al código de barras o QR del TAG
-              </div>
-            </div>
-          )}
-
-          {cameraError && (
-            <div className="p-3 bg-rose-950/80 border border-rose-800 text-rose-300 text-xs rounded-xl flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{cameraError}</span>
-            </div>
-          )}
-
-          {lastScannedTag && (
-            <div className="p-3 bg-emerald-950/90 border border-emerald-500/50 text-emerald-300 rounded-xl flex items-center justify-between text-xs font-bold animate-pulse">
-              <div className="flex items-center space-x-2">
-                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                <span>TAG Capturado: <span className="font-mono text-white text-sm">{lastScannedTag}</span></span>
-              </div>
-              <span className="text-[10px] bg-emerald-800/60 text-emerald-200 px-2 py-0.5 rounded-full uppercase">Lector OK</span>
-            </div>
-          )}
-        </div>
-
         {/* Mensajes de notificación */}
         {message && (
           <div
@@ -373,25 +225,15 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
             {/* Nº Serie TAG RFID */}
             <div>
               <label className="block text-xs font-bold text-cs-primary uppercase mb-1">2. Nº Serie TAG RFID *</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  name="tag_serial"
-                  value={formData.tag_serial}
-                  onChange={handleChange}
-                  placeholder="Escanear con cámara o ingresar"
-                  className="w-full p-3 pr-10 rounded-xl border-2 border-cs-primary/60 font-mono font-bold text-cs-dark tracking-wider bg-cs-primary/5 focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={toggleScanner}
-                  className="absolute right-2 top-2.5 p-1 bg-cs-primary text-white rounded-lg hover:bg-cs-dark transition"
-                  title="Abrir Cámara Escáner"
-                >
-                  <QrCode className="w-5 h-5" />
-                </button>
-              </div>
+              <input
+                type="text"
+                name="tag_serial"
+                value={formData.tag_serial}
+                onChange={handleChange}
+                placeholder="Ingresar número de serie TAG RFID"
+                className="w-full p-3 rounded-xl border-2 border-cs-primary/60 font-mono font-bold text-cs-dark tracking-wider bg-cs-primary/5 focus:ring-2 focus:ring-cs-primary focus:outline-none uppercase"
+                required
+              />
             </div>
 
             {/* Dominio / Patente (OBLIGATORIO) */}
@@ -413,7 +255,6 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
             <div>
               <label className="block text-xs font-bold text-cs-primary uppercase mb-1">4. DNI / CUIT *</label>
               <input
-                ref={dniInputRef}
                 type="text"
                 name="dni_cuit"
                 value={formData.dni_cuit}
