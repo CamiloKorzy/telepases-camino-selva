@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { TagDelivery, UserSession, TagBatch } from '@/types/database';
+import { TagDelivery, UserSession, TagBatch, PeajeStock } from '@/types/database';
 import { QrCode, CheckCircle2, AlertCircle, Save, Car, Camera, CameraOff, Zap, User } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -21,6 +21,42 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     operador_runner: currentUser.nombre || currentUser.email,
     observaciones: '',
   });
+
+  const [deliveryPoints, setDeliveryPoints] = useState<string[]>([
+    'Santa Ana',
+    'Colonia Victoria',
+    'Paraje Fachinal',
+    'Ituzaingó',
+  ]);
+
+  useEffect(() => {
+    // Cargar Puntos de Entrega dinámicos
+    const loadPoints = async () => {
+      let points: string[] = [];
+      const stored = localStorage.getItem('telepase_local_delivery_points');
+      if (stored) {
+        try {
+          const list: PeajeStock[] = JSON.parse(stored);
+          if (list.length > 0) points = list.map((p) => p.estacion);
+        } catch {}
+      }
+
+      try {
+        const { data } = await supabase.from('peaje_stock').select('estacion');
+        if (data && data.length > 0) {
+          const remoteNames = data.map((d) => d.estacion);
+          points = Array.from(new Set([...points, ...remoteNames]));
+        }
+      } catch {}
+
+      if (points.length > 0) {
+        setDeliveryPoints(points);
+        setFormData((prev) => ({ ...prev, estacion: prev.estacion || points[0] }));
+      }
+    };
+
+    loadPoints();
+  }, []);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -162,12 +198,12 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       return;
     }
 
-    // 1. Validar que el TAG pertenezca a un lote habilitado para esta estación
+    // 1. Validar que el TAG pertenezca a un lote habilitado para este Punto de Entrega
     const habilitado = isTagInEnabledBatch(tagClean, formData.estacion);
     if (!habilitado) {
       setMessage({
         type: 'error',
-        text: `El TAG "${tagClean}" NO pertenece a ningún lote dado de alta para la estación ${formData.estacion}. Verifique el número o registre el lote en Configuración.`,
+        text: `El TAG "${tagClean}" NO pertenece a ningún lote dado de alta para el Punto de Entrega ${formData.estacion}. Verifique el número o registre el lote en Configuración.`,
       });
       setLoading(false);
       return;
@@ -321,19 +357,20 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Estación de Peaje */}
+            {/* Punto de Entrega */}
             <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">1. Estación Peaje *</label>
+              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">1. Punto de Entrega *</label>
               <select
                 name="estacion"
                 value={formData.estacion}
                 onChange={handleChange}
                 className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 font-semibold text-slate-800 focus:ring-2 focus:ring-cs-primary focus:outline-none"
               >
-                <option value="Santa Ana">Santa Ana (RN 12)</option>
-                <option value="Colonia Victoria">Colonia Victoria (RN 12)</option>
-                <option value="Paraje Fachinal">Paraje Fachinal (RN 105)</option>
-                <option value="Ituzaingó">Ituzaingó (RN 12)</option>
+                {deliveryPoints.map((pt) => (
+                  <option key={pt} value={pt}>
+                    {pt}
+                  </option>
+                ))}
               </select>
             </div>
 

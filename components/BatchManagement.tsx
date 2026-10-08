@@ -19,10 +19,47 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Formulario nuevo lote
-  const [estacion, setEstacion] = useState<'Santa Ana' | 'Colonia Victoria' | 'Paraje Fachinal' | 'Ituzaingó'>('Santa Ana');
+  const [estacion, setEstacion] = useState<string>('Santa Ana');
   const [serialDesde, setSerialDesde] = useState('');
   const [serialHasta, setSerialHasta] = useState('');
   const [observaciones, setObservaciones] = useState('');
+  const [deliveryPoints, setDeliveryPoints] = useState<string[]>([
+    'Santa Ana',
+    'Colonia Victoria',
+    'Paraje Fachinal',
+    'Ituzaingó',
+  ]);
+
+  // Cargar Puntos de Entrega dinámicos
+  useEffect(() => {
+    const loadPoints = async () => {
+      let points: string[] = [];
+      const stored = localStorage.getItem('telepase_local_delivery_points');
+      if (stored) {
+        try {
+          const list = JSON.parse(stored);
+          if (Array.isArray(list) && list.length > 0) {
+            points = list.map((p: any) => p.estacion);
+          }
+        } catch {}
+      }
+
+      try {
+        const { data } = await supabase.from('peaje_stock').select('estacion');
+        if (data && data.length > 0) {
+          const remoteNames = data.map((d) => d.estacion);
+          points = Array.from(new Set([...points, ...remoteNames]));
+        }
+      } catch {}
+
+      if (points.length > 0) {
+        setDeliveryPoints(points);
+        setEstacion(points[0]);
+      }
+    };
+
+    loadPoints();
+  }, []);
 
   // Calcular cantidad estimada
   const numDesde = parseInt(serialDesde.replace(/\D/g, ''), 10);
@@ -168,16 +205,17 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">1. Estación de Peaje *</label>
+              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">1. Punto de Entrega *</label>
               <select
                 value={estacion}
-                onChange={(e) => setEstacion(e.target.value as any)}
+                onChange={(e) => setEstacion(e.target.value)}
                 className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-slate-50 text-slate-800"
               >
-                <option value="Santa Ana">Santa Ana (RN 12)</option>
-                <option value="Colonia Victoria">Colonia Victoria (RN 12)</option>
-                <option value="Paraje Fachinal">Paraje Fachinal (RN 105)</option>
-                <option value="Ituzaingó">Ituzaingó (RN 12)</option>
+                {deliveryPoints.map((pt) => (
+                  <option key={pt} value={pt}>
+                    {pt}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -250,7 +288,7 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Layers className="w-5 h-5 text-cs-primary" />
-            <h3 className="font-bold text-base text-slate-900">Lotes de TAGs Habilitados por Estación</h3>
+            <h3 className="font-bold text-base text-slate-900">Lotes de TAGs Habilitados por Punto de Entrega</h3>
           </div>
           <button
             onClick={fetchBatches}
@@ -266,7 +304,7 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
             <thead className="bg-cs-dark text-white">
               <tr>
                 <th className="p-3">Fecha Alta</th>
-                <th className="p-3">Estación</th>
+                <th className="p-3">Punto de Entrega</th>
                 <th className="p-3">Serial Desde</th>
                 <th className="p-3">Serial Hasta</th>
                 <th className="p-3">Unidades</th>

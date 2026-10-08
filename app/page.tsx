@@ -8,16 +8,18 @@ import DeliveryForm from '@/components/DeliveryForm';
 import LoginForm from '@/components/LoginForm';
 import UserManagement from '@/components/UserManagement';
 import BatchManagement from '@/components/BatchManagement';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, Settings, LayoutDashboard, PlusCircle, Users } from 'lucide-react';
+import DeliveryPointManagement from '@/components/DeliveryPointManagement';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin } from 'lucide-react';
 
 export default function AntigravityDashboard() {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
   const [deliveries, setDeliveries] = useState<TagDelivery[]>([]);
   const [stocks, setStocks] = useState<PeajeStock[]>([]);
+  const [availableStations, setAvailableStations] = useState<string[]>(['Santa Ana', 'Colonia Victoria', 'Paraje Fachinal', 'Ituzaingó']);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<string>('Todas');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'settings_batches' | 'settings_users'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'settings_batches' | 'settings_points' | 'settings_users'>('dashboard');
 
   // Cargar sesión al iniciar
   useEffect(() => {
@@ -80,11 +82,20 @@ export default function AntigravityDashboard() {
     );
     setDeliveries(allDeliveries);
 
-    // 3. Obtener stock
+    // 3. Obtener stock y Puntos de Entrega registrados
     try {
       const { data: stockData } = await supabase.from('peaje_stock').select('*');
       if (stockData) remoteStock = stockData;
     } catch {}
+
+    // Puntos de Entrega locales
+    let localPoints: PeajeStock[] = [];
+    const storedPoints = localStorage.getItem('telepase_local_delivery_points');
+    if (storedPoints) {
+      try {
+        localPoints = JSON.parse(storedPoints);
+      } catch {}
+    }
 
     // Lotes cargados localmente
     const storedBatches = localStorage.getItem('telepase_local_tag_batches');
@@ -95,22 +106,46 @@ export default function AntigravityDashboard() {
     }
 
     const defaultStations = ['Santa Ana', 'Colonia Victoria', 'Paraje Fachinal', 'Ituzaingó'];
-    const finalStocks: PeajeStock[] = defaultStations.map((st) => {
+    
+    // Obtener lista completa de nombres de Puntos de Entrega
+    const stationNamesSet = new Set<string>([
+      ...defaultStations,
+      ...localPoints.map((p) => p.estacion),
+      ...remoteStock.map((s) => s.estacion),
+      ...allDeliveries.map((d) => d.estacion),
+    ]);
+
+    const stationNamesList = Array.from(stationNamesSet);
+    setAvailableStations(stationNamesList);
+
+    const finalStocks: PeajeStock[] = stationNamesList.map((st) => {
       const foundRemote = remoteStock.find((s) => s.estacion === st);
-      const baseRecibido = foundRemote ? foundRemote.stock_recibido : 1000;
+      const foundLocal = localPoints.find((p) => p.estacion === st);
+      
+      const baseRecibido = foundRemote
+        ? foundRemote.stock_recibido
+        : foundLocal
+        ? foundLocal.stock_recibido
+        : 1000;
       
       // Sumar recibido de lotes
       const lotesEstacion = localBatches.filter((b) => b.estacion === st);
       const extraRecibido = lotesEstacion.reduce((acc, b) => acc + (b.cantidad || 0), 0);
 
-      // Entregados en esta estación
+      // Entregados en este Punto de Entrega
       const entregadosEstacion = allDeliveries.filter((d) => d.estacion === st).length;
+
+      const minimoAlerta = foundRemote
+        ? foundRemote.stock_minimo_alerta
+        : foundLocal
+        ? foundLocal.stock_minimo_alerta
+        : 100;
 
       return {
         estacion: st,
         stock_recibido: baseRecibido + extraRecibido,
         stock_entregado: entregadosEstacion,
-        stock_minimo_alerta: foundRemote ? foundRemote.stock_minimo_alerta : 100,
+        stock_minimo_alerta: minimoAlerta,
       };
     });
 
@@ -157,12 +192,12 @@ export default function AntigravityDashboard() {
     const excelData = filteredDeliveries.map((d) => ({
       'ID Registro': d.id,
       'Fecha y Hora': d.created_at ? new Date(d.created_at).toLocaleString('es-AR') : '',
-      'Estación Peaje': d.estacion,
+      'Punto de Entrega': d.estacion,
       'Dominio / Patente': d.dominio,
       'Nº Serie TAG RFID': d.tag_serial,
       'DNI / CUIT': d.dni_cuit,
-      'Nombre y Apellido': d.nombre_apellido || 'N/A',
-      'Usuario / Operador Registrador': d.operador_runner,
+      'Nombre Receptor': d.nombre_apellido || 'N/A',
+      'Usuario Registrador': d.operador_runner,
       'Observaciones': d.observaciones || '',
       'Sincronizado GLM': d.sincronizado_glm ? 'SÍ' : 'NO',
     }));
@@ -174,7 +209,7 @@ export default function AntigravityDashboard() {
     worksheet['!cols'] = [
       { wch: 36 },
       { wch: 20 },
-      { wch: 18 },
+      { wch: 22 },
       { wch: 12 },
       { wch: 16 },
       { wch: 14 },
@@ -190,9 +225,9 @@ export default function AntigravityDashboard() {
 
   // Exportar a CSV
   const exportToCSV = () => {
-    const headers = 'ID,Fecha_Hora,Estacion,Dominio,TAG_Serial,DNI_CUIT,Nombre_Apellido,Usuario_Operador,Observaciones\n';
+    const headers = 'ID,Fecha_Hora,Punto_de_Entrega,Dominio,TAG_Serial,DNI_CUIT,Nombre_Apellido,Usuario_Operador,Observaciones\n';
     const rows = filteredDeliveries
-      .map((d) => `${d.id},${d.created_at},${d.estacion},${d.dominio},${d.tag_serial},${d.dni_cuit},"${d.nombre_apellido || ''}","${d.operador_runner}","${d.observaciones || ''}"`)
+      .map((d) => `${d.id},${d.created_at},"${d.estacion}",${d.dominio},${d.tag_serial},${d.dni_cuit},"${d.nombre_apellido || ''}","${d.operador_runner}","${d.observaciones || ''}"`)
       .join('\n');
     
     const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
@@ -260,17 +295,31 @@ export default function AntigravityDashboard() {
               </button>
 
               {isAdmin && (
-                <button
-                  onClick={() => setActiveTab('settings_users')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
-                    activeTab === 'settings_users'
-                      ? 'bg-cs-primary text-white shadow-sm'
-                      : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>Usuarios</span>
-                </button>
+                <>
+                  <button
+                    onClick={() => setActiveTab('settings_points')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                      activeTab === 'settings_points'
+                        ? 'bg-cs-primary text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>Puntos de Entrega</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('settings_users')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                      activeTab === 'settings_users'
+                        ? 'bg-cs-primary text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Usuarios</span>
+                  </button>
+                </>
               )}
             </div>
 
@@ -319,15 +368,20 @@ export default function AntigravityDashboard() {
           <BatchManagement currentUser={userSession} onBatchCreated={fetchData} />
         )}
 
-        {/* VISTA 2: CONFIGURACIÓN Y USUARIOS (ADMINISTRADORES) */}
+        {/* VISTA 2: CONFIGURACIÓN Y ALTA DE PUNTOS DE ENTREGA (ADMINISTRADORES) */}
+        {activeTab === 'settings_points' && isAdmin && (
+          <DeliveryPointManagement onPointUpdated={fetchData} />
+        )}
+
+        {/* VISTA 3: CONFIGURACIÓN Y USUARIOS (ADMINISTRADORES) */}
         {activeTab === 'settings_users' && isAdmin && (
           <UserManagement />
         )}
 
-        {/* VISTA 3: PANEL PRINCIPAL DE ENTREGAS Y STOCK */}
+        {/* VISTA 4: PANEL PRINCIPAL DE ENTREGAS Y STOCK */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {/* Tarjetas de Stock por Plaza */}
+            {/* Tarjetas de Stock por Punto de Entrega */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {stocks.map((s) => {
                 const disponible = s.stock_recibido - s.stock_entregado;
@@ -336,17 +390,17 @@ export default function AntigravityDashboard() {
                 return (
                   <div key={s.estacion} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 hover:border-cs-primary/40 transition">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-bold text-cs-primary uppercase tracking-wide">{s.estacion}</span>
+                      <span className="text-[11px] font-bold text-cs-primary uppercase tracking-wide truncate max-w-[130px]">{s.estacion}</span>
                       {bajoStock ? (
-                        <AlertTriangle className="w-4 h-4 text-rose-500" />
+                        <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0" />
                       ) : (
-                        <ShieldCheck className="w-4 h-4 text-cs-primary" />
+                        <ShieldCheck className="w-4 h-4 text-cs-primary flex-shrink-0" />
                       )}
                     </div>
                     <div className="text-2xl font-black text-slate-900">{disponible} <span className="text-xs font-normal text-slate-500">disp.</span></div>
                     <div className="text-xs text-slate-500 mt-1 flex justify-between">
                       <span>Entregados: <b className="text-slate-800">{s.stock_entregado}</b></span>
-                      <span>Total Recibido: {s.stock_recibido}</span>
+                      <span>Recibidos: {s.stock_recibido}</span>
                     </div>
                   </div>
                 );
@@ -408,11 +462,12 @@ export default function AntigravityDashboard() {
                     onChange={(e) => setSelectedStation(e.target.value)}
                     className="p-2.5 text-sm rounded-xl border border-slate-300 font-medium focus:outline-none focus:ring-2 focus:ring-cs-primary bg-slate-50 text-slate-800"
                   >
-                    <option value="Todas">Todas las Estaciones</option>
-                    <option value="Santa Ana">Santa Ana</option>
-                    <option value="Colonia Victoria">Colonia Victoria</option>
-                    <option value="Paraje Fachinal">Paraje Fachinal</option>
-                    <option value="Ituzaingó">Ituzaingó</option>
+                    <option value="Todas">Todos los Puntos de Entrega</option>
+                    {availableStations.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -422,7 +477,7 @@ export default function AntigravityDashboard() {
                     <thead className="bg-cs-dark text-white sticky top-0 z-10">
                       <tr>
                         <th className="p-3">Fecha/Hora</th>
-                        <th className="p-3">Estación</th>
+                        <th className="p-3">Punto de Entrega</th>
                         <th className="p-3">Patente *</th>
                         <th className="p-3">TAG Serial *</th>
                         <th className="p-3">DNI / CUIT *</th>

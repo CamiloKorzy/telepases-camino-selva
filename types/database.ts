@@ -1,7 +1,7 @@
 export interface TagDelivery {
   id?: string;
   created_at?: string;
-  estacion: 'Santa Ana' | 'Colonia Victoria' | 'Paraje Fachinal' | 'Ituzaingó';
+  estacion: string;
   nombre_apellido?: string;
   dni_cuit: string;
   dominio: string;
@@ -20,6 +20,8 @@ export interface PeajeStock {
   stock_minimo_alerta: number;
   updated_at?: string;
 }
+
+export type DeliveryPoint = PeajeStock;
 
 export interface UserProfile {
   id?: string;
@@ -42,7 +44,7 @@ export interface UserSession {
 export interface TagBatch {
   id?: string;
   created_at?: string;
-  estacion: 'Santa Ana' | 'Colonia Victoria' | 'Paraje Fachinal' | 'Ituzaingó';
+  estacion: string;
   serial_desde: string;
   serial_hasta: string;
   cantidad: number;

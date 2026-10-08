@@ -1,5 +1,5 @@
 -- =====================================================================
--- PROYECTO PEAJES CORREDOR NORESTE - CAMINO SELVA S.A.
+-- PROYECTO CORREDOR NORESTE - CAMINO SELVA S.A.
 -- APLICACIÓN ANTIGRAVITY: REGISTRO Y CONTROL DE TAGS TELEPASE
 -- =====================================================================
 
@@ -7,7 +7,7 @@
 CREATE TABLE IF NOT EXISTS public.tag_deliveries (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
-    estacion VARCHAR(50) NOT NULL CHECK (estacion IN ('Santa Ana', 'Colonia Victoria', 'Paraje Fachinal', 'Ituzaingó')),
+    estacion VARCHAR(100) NOT NULL, -- Punto de Entrega
     nombre_apellido VARCHAR(150),
     dni_cuit VARCHAR(20) NOT NULL,
     dominio VARCHAR(10) NOT NULL,
@@ -18,17 +18,17 @@ CREATE TABLE IF NOT EXISTS public.tag_deliveries (
     fecha_cruce_glm TIMESTAMPTZ
 );
 
--- 2. TABLA DE CONTROL DE STOCK POR ESTACIÓN DE PEAJE
+-- 2. TABLA DE CONTROL DE STOCK POR PUNTO DE ENTREGA
 CREATE TABLE IF NOT EXISTS public.peaje_stock (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    estacion VARCHAR(50) NOT NULL UNIQUE CHECK (estacion IN ('Santa Ana', 'Colonia Victoria', 'Paraje Fachinal', 'Ituzaingó')),
+    estacion VARCHAR(100) NOT NULL UNIQUE, -- Nombre del Punto de Entrega
     stock_recibido INT NOT NULL DEFAULT 0,
     stock_entregado INT NOT NULL DEFAULT 0,
     stock_minimo_alerta INT NOT NULL DEFAULT 100,
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- INICIALIZAR LAS 4 PLAZAS DE PEAJE
+-- INICIALIZAR LOS PUNTOS DE ENTREGA INICIALES
 INSERT INTO public.peaje_stock (estacion, stock_recibido, stock_minimo_alerta)
 VALUES 
     ('Santa Ana', 2000, 150),
@@ -90,11 +90,11 @@ ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Permitir lectura publica de usuarios" ON public.user_profiles FOR SELECT USING (true);
 CREATE POLICY "Permitir insercion y edicion de usuarios" ON public.user_profiles FOR ALL USING (true);
 
--- 7. TABLA DE ALTA DE LOTES DE TAGS POR ESTACIÓN (INVENTARIO NUMERADO)
+-- 7. TABLA DE ALTA DE LOTES DE TAGS POR PUNTO DE ENTREGA (INVENTARIO NUMERADO)
 CREATE TABLE IF NOT EXISTS public.tag_batches (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
-    estacion VARCHAR(50) NOT NULL CHECK (estacion IN ('Santa Ana', 'Colonia Victoria', 'Paraje Fachinal', 'Ituzaingó')),
+    estacion VARCHAR(100) NOT NULL, -- Nombre del Punto de Entrega
     serial_desde VARCHAR(20) NOT NULL,
     serial_hasta VARCHAR(20) NOT NULL,
     cantidad INT NOT NULL,

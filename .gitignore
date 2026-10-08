@@ -37,3 +37,5 @@ next-env.d.ts
 /android/.gradle/
 /android/build/
 /android/local.properties
+
+.vercel
