@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagBatch, UserSession } from '@/types/database';
-import { Layers, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText } from 'lucide-react';
+import { Layers, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Calendar, Receipt } from 'lucide-react';
 
 const LOCAL_BATCHES_KEY = 'telepase_local_tag_batches';
 
@@ -19,10 +19,16 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Formulario nuevo lote
+  const [fechaRecepcion, setFechaRecepcion] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
   const [estacion, setEstacion] = useState<string>('Santa Ana');
-  const [serialDesde, setSerialDesde] = useState('');
-  const [serialHasta, setSerialHasta] = useState('');
-  const [observaciones, setObservaciones] = useState('');
+  const [numeroRemito, setNumeroRemito] = useState<string>('');
+  const [serialDesde, setSerialDesde] = useState<string>('');
+  const [serialHasta, setSerialHasta] = useState<string>('');
+  const [cantidadInput, setCantidadInput] = useState<string>('');
+  const [observaciones, setObservaciones] = useState<string>('');
+
   const [deliveryPoints, setDeliveryPoints] = useState<string[]>([
     'Santa Ana',
     'Colonia Victoria',
@@ -61,10 +67,17 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
     loadPoints();
   }, []);
 
-  // Calcular cantidad estimada
-  const numDesde = parseInt(serialDesde.replace(/\D/g, ''), 10);
-  const numHasta = parseInt(serialHasta.replace(/\D/g, ''), 10);
-  const cantidadCalculada = !isNaN(numDesde) && !isNaN(numHasta) && numHasta >= numDesde ? numHasta - numDesde + 1 : 1;
+  // Recalcular cantidad estimada automáticamente cuando cambian los seriales
+  useEffect(() => {
+    const numDesde = parseInt(serialDesde.replace(/\D/g, ''), 10);
+    const numHasta = parseInt(serialHasta.replace(/\D/g, ''), 10);
+
+    if (!isNaN(numDesde) && !isNaN(numHasta) && numHasta >= numDesde) {
+      // Si el serial inicial termina en 0000 o 00, se suele contar exacto o inclusive
+      const calc = numHasta - numDesde + 1;
+      setCantidadInput(String(calc));
+    }
+  }, [serialDesde, serialHasta]);
 
   const fetchBatches = async () => {
     setLoading(true);
@@ -112,6 +125,7 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
 
     const desdeClean = serialDesde.trim().toUpperCase();
     const hastaClean = serialHasta.trim().toUpperCase();
+    const parsedCantidad = parseInt(cantidadInput, 10);
 
     if (!desdeClean || !hastaClean) {
       setMessage({ type: 'error', text: 'Debe ingresar el número inicial (Desde) y final (Hasta) del lote.' });
@@ -119,26 +133,38 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
       return;
     }
 
+    if (isNaN(parsedCantidad) || parsedCantidad <= 0) {
+      setMessage({ type: 'error', text: 'Por favor ingrese una cantidad de unidades válida.' });
+      setSubmitting(false);
+      return;
+    }
+
     const newBatch: TagBatch = {
       id: crypto.randomUUID(),
       created_at: new Date().toISOString(),
+      fecha_recepcion: fechaRecepcion || new Date().toISOString().split('T')[0],
       estacion,
       serial_desde: desdeClean,
       serial_hasta: hastaClean,
-      cantidad: cantidadCalculada,
+      cantidad: parsedCantidad,
+      numero_remito: numeroRemito.trim(),
       observaciones: observaciones.trim(),
       usuario_registro: currentUser.nombre || currentUser.email,
     };
 
     try {
-      const { error } = await supabase.from('tag_batches').insert([{
-        estacion: newBatch.estacion,
-        serial_desde: newBatch.serial_desde,
-        serial_hasta: newBatch.serial_hasta,
-        cantidad: newBatch.cantidad,
-        observaciones: newBatch.observaciones,
-        usuario_registro: newBatch.usuario_registro,
-      }]);
+      const { error } = await supabase.from('tag_batches').insert([
+        {
+          fecha_recepcion: newBatch.fecha_recepcion,
+          estacion: newBatch.estacion,
+          serial_desde: newBatch.serial_desde,
+          serial_hasta: newBatch.serial_hasta,
+          cantidad: newBatch.cantidad,
+          numero_remito: newBatch.numero_remito,
+          observaciones: newBatch.observaciones,
+          usuario_registro: newBatch.usuario_registro,
+        },
+      ]);
 
       if (error) console.warn('Supabase no disponible para lotes:', error.message);
     } catch {}
@@ -153,17 +179,19 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
     try {
       await supabase.rpc('increment_stock_recibido', {
         p_estacion: estacion,
-        p_cantidad: cantidadCalculada,
+        p_cantidad: parsedCantidad,
       });
     } catch {}
 
     setMessage({
       type: 'success',
-      text: `¡Lote de ${cantidadCalculada} TAGs (del ${desdeClean} al ${hastaClean}) habilitado exitosamente para ${estacion}!`,
+      text: `¡Lote de ${parsedCantidad} TAGs (del ${desdeClean} al ${hastaClean}) habilitado exitosamente para ${estacion}!`,
     });
 
     setSerialDesde('');
     setSerialHasta('');
+    setCantidadInput('');
+    setNumeroRemito('');
     setObservaciones('');
     setSubmitting(false);
 
@@ -181,7 +209,7 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
             <h3 className="font-bold text-base">Recepción y Alta de Lotes de TAGs</h3>
           </div>
           <span className="text-[11px] font-bold bg-white/10 text-emerald-200 px-3 py-1 rounded-full border border-white/15">
-            Inventario Numerado
+            Función Rol Administrador
           </span>
         </div>
 
@@ -203,9 +231,28 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {/* 1. Fecha de Recepción */}
             <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">1. Punto de Entrega *</label>
+              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
+                1. Fecha Recepción *
+              </label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={fechaRecepcion}
+                  onChange={(e) => setFechaRecepcion(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-slate-50 text-slate-800"
+                  required
+                />
+              </div>
+            </div>
+
+            {/* 2. Punto de Entrega */}
+            <div>
+              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
+                2. Punto de Entrega *
+              </label>
               <select
                 value={estacion}
                 onChange={(e) => setEstacion(e.target.value)}
@@ -219,14 +266,34 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
               </select>
             </div>
 
+            {/* 3. Número de Remito */}
             <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">2. Serial Desde (Inicial) *</label>
+              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
+                3. Nº de Remito
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={numeroRemito}
+                  onChange={(e) => setNumeroRemito(e.target.value)}
+                  placeholder="ej. R-0001-00849"
+                  className="w-full p-2.5 pr-8 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                />
+                <Receipt className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5" />
+              </div>
+            </div>
+
+            {/* 4. Serial Desde */}
+            <div>
+              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
+                4. Serial Desde *
+              </label>
               <div className="relative">
                 <input
                   type="text"
                   value={serialDesde}
                   onChange={(e) => setSerialDesde(e.target.value)}
-                  placeholder="ej. 100001 o TAG-001"
+                  placeholder="ej. 63230000"
                   className="w-full p-2.5 pr-8 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
                   required
                 />
@@ -234,14 +301,17 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
               </div>
             </div>
 
+            {/* 5. Serial Hasta */}
             <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">3. Serial Hasta (Final) *</label>
+              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
+                5. Serial Hasta *
+              </label>
               <div className="relative">
                 <input
                   type="text"
                   value={serialHasta}
                   onChange={(e) => setSerialHasta(e.target.value)}
-                  placeholder="ej. 100500 o TAG-500"
+                  placeholder="ej. 63231500"
                   className="w-full p-2.5 pr-8 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
                   required
                 />
@@ -249,23 +319,33 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
               </div>
             </div>
 
+            {/* 6. Cantidad de Unidades (EDITABLE) */}
             <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">Cantidad de Unidades</label>
-              <div className="p-2.5 rounded-xl border border-slate-200 bg-slate-100 font-bold text-cs-primary text-xs flex items-center justify-between">
-                <span>{cantidadCalculada} TAGs</span>
-                <span className="text-[10px] font-normal text-slate-500">Calculado</span>
-              </div>
+              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
+                6. Cantidad Unidades *
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={cantidadInput}
+                onChange={(e) => setCantidadInput(e.target.value)}
+                placeholder="ej. 1500"
+                className="w-full p-2.5 rounded-xl border-2 border-cs-primary/60 font-mono font-bold text-cs-dark text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none bg-emerald-50/40"
+                required
+              />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Observaciones / Nº de Remito (Opcional)</label>
+            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+              Observaciones del Lote (Opcional)
+            </label>
             <div className="relative">
               <input
                 type="text"
                 value={observaciones}
                 onChange={(e) => setObservaciones(e.target.value)}
-                placeholder="ej. Remito #84920 - Proveedor RFID TelePASE"
+                placeholder="ej. Remito firmado por transporte oficial TelePASE"
                 className="w-full p-2.5 pl-9 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
               />
               <FileText className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -303,8 +383,9 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
           <table className="w-full text-left border-collapse text-xs">
             <thead className="bg-cs-dark text-white">
               <tr>
-                <th className="p-3">Fecha Alta</th>
+                <th className="p-3">Fecha Recepción</th>
                 <th className="p-3">Punto de Entrega</th>
+                <th className="p-3">Nº Remito</th>
                 <th className="p-3">Serial Desde</th>
                 <th className="p-3">Serial Hasta</th>
                 <th className="p-3">Unidades</th>
@@ -315,17 +396,18 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
             <tbody className="divide-y divide-slate-200">
               {batches.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-slate-400">
+                  <td colSpan={8} className="p-6 text-center text-slate-400">
                     No se han registrado lotes de recepción de TAGs aún.
                   </td>
                 </tr>
               ) : (
                 batches.map((b, idx) => (
                   <tr key={b.id || idx} className="hover:bg-slate-50 transition">
-                    <td className="p-3 text-slate-500 font-mono text-[11px] whitespace-nowrap">
-                      {b.created_at ? new Date(b.created_at).toLocaleString('es-AR') : '-'}
+                    <td className="p-3 text-slate-700 font-mono text-[11px] whitespace-nowrap font-bold">
+                      {b.fecha_recepcion || (b.created_at ? new Date(b.created_at).toLocaleDateString('es-AR') : '-')}
                     </td>
                     <td className="p-3 font-bold text-slate-800 whitespace-nowrap">{b.estacion}</td>
+                    <td className="p-3 font-mono font-bold text-slate-900">{b.numero_remito || '-'}</td>
                     <td className="p-3 font-mono font-bold text-cs-primary">{b.serial_desde}</td>
                     <td className="p-3 font-mono font-bold text-cs-primary">{b.serial_hasta}</td>
                     <td className="p-3 font-bold text-slate-900">

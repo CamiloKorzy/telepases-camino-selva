@@ -285,20 +285,20 @@ export default function AntigravityDashboard() {
                 <span>Entregas</span>
               </button>
 
-              <button
-                onClick={() => setActiveTab('settings_batches')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
-                  activeTab === 'settings_batches'
-                    ? 'bg-cs-primary text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <PlusCircle className="w-3.5 h-3.5" />
-                <span>Alta de TAGs</span>
-              </button>
-
               {isAdmin && (
                 <>
+                  <button
+                    onClick={() => setActiveTab('settings_batches')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                      activeTab === 'settings_batches'
+                        ? 'bg-cs-primary text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    <span>Alta de TAGs</span>
+                  </button>
+
                   <button
                     onClick={() => setActiveTab('settings_points')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
@@ -373,8 +373,8 @@ export default function AntigravityDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 mt-6">
-        {/* VISTA 1: ALTA Y RECEPCIÓN DE LOTES DE TAGS */}
-        {activeTab === 'settings_batches' && (
+        {/* VISTA 1: ALTA Y RECEPCIÓN DE LOTES DE TAGS (SOLO ADMIN) */}
+        {activeTab === 'settings_batches' && isAdmin && (
           <BatchManagement currentUser={userSession} onBatchCreated={fetchData} />
         )}
 

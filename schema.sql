@@ -95,10 +95,12 @@ CREATE POLICY "Permitir insercion y edicion de usuarios" ON public.user_profiles
 CREATE TABLE IF NOT EXISTS public.tag_batches (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    fecha_recepcion DATE DEFAULT CURRENT_DATE NOT NULL,
     estacion VARCHAR(100) NOT NULL, -- Nombre del Punto de Entrega
     serial_desde VARCHAR(20) NOT NULL,
     serial_hasta VARCHAR(20) NOT NULL,
     cantidad INT NOT NULL,
+    numero_remito VARCHAR(100),
     observaciones TEXT,
     usuario_registro VARCHAR(100) NOT NULL
 );

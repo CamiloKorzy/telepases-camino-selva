@@ -46,10 +46,12 @@ export interface UserSession {
 export interface TagBatch {
   id?: string;
   created_at?: string;
+  fecha_recepcion?: string;
   estacion: string;
   serial_desde: string;
   serial_hasta: string;
   cantidad: number;
+  numero_remito?: string;
   observaciones?: string;
   usuario_registro: string;
 }
