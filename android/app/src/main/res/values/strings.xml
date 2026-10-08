@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TelePASE Camino Selva</string>
+    <string name="title_activity_main">TelePASE Camino Selva</string>
+    <string name="package_name">com.caminoselva.telepase</string>
+    <string name="custom_url_scheme">com.caminoselva.telepase</string>
+</resources>

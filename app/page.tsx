@@ -1,0 +1,477 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
+import { supabase } from '@/lib/supabase';
+import { TagDelivery, PeajeStock, UserSession, TagBatch } from '@/types/database';
+import DeliveryForm from '@/components/DeliveryForm';
+import LoginForm from '@/components/LoginForm';
+import UserManagement from '@/components/UserManagement';
+import BatchManagement from '@/components/BatchManagement';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, Settings, LayoutDashboard, PlusCircle, Users } from 'lucide-react';
+
+export default function AntigravityDashboard() {
+  const [userSession, setUserSession] = useState<UserSession | null>(null);
+  const [deliveries, setDeliveries] = useState<TagDelivery[]>([]);
+  const [stocks, setStocks] = useState<PeajeStock[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStation, setSelectedStation] = useState<string>('Todas');
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'settings_batches' | 'settings_users'>('dashboard');
+
+  // Cargar sesión al iniciar
+  useEffect(() => {
+    const stored = localStorage.getItem('telepase_user_session');
+    if (stored) {
+      try {
+        const session: UserSession = JSON.parse(stored);
+        if (session.activo !== false) {
+          if (!session.rol) {
+            session.rol = 'Administrador';
+            localStorage.setItem('telepase_user_session', JSON.stringify(session));
+          }
+          setUserSession(session);
+        } else {
+          localStorage.removeItem('telepase_user_session');
+        }
+      } catch {
+        localStorage.removeItem('telepase_user_session');
+      }
+    }
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    let remoteDeliveries: TagDelivery[] = [];
+    let localDeliveries: TagDelivery[] = [];
+    let remoteStock: PeajeStock[] = [];
+    let localBatches: TagBatch[] = [];
+
+    // 1. Obtener entregas de Supabase
+    try {
+      const { data: deliveriesData } = await supabase
+        .from('tag_deliveries')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(300);
+
+      if (deliveriesData) remoteDeliveries = deliveriesData;
+    } catch {}
+
+    // 2. Obtener entregas guardadas en localStorage
+    const storedLocalDeliveries = localStorage.getItem('telepase_local_tag_deliveries');
+    if (storedLocalDeliveries) {
+      try {
+        localDeliveries = JSON.parse(storedLocalDeliveries);
+      } catch {}
+    }
+
+    // Combinar entregas remotas y locales sin duplicados por ID o TAG serial
+    const deliveryMap = new Map<string, TagDelivery>();
+    [...localDeliveries, ...remoteDeliveries].forEach((d) => {
+      const key = d.id || d.tag_serial;
+      if (!deliveryMap.has(key)) {
+        deliveryMap.set(key, d);
+      }
+    });
+
+    const allDeliveries = Array.from(deliveryMap.values()).sort(
+      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    );
+    setDeliveries(allDeliveries);
+
+    // 3. Obtener stock
+    try {
+      const { data: stockData } = await supabase.from('peaje_stock').select('*');
+      if (stockData) remoteStock = stockData;
+    } catch {}
+
+    // Lotes cargados localmente
+    const storedBatches = localStorage.getItem('telepase_local_tag_batches');
+    if (storedBatches) {
+      try {
+        localBatches = JSON.parse(storedBatches);
+      } catch {}
+    }
+
+    const defaultStations = ['Santa Ana', 'Colonia Victoria', 'Paraje Fachinal', 'Ituzaingó'];
+    const finalStocks: PeajeStock[] = defaultStations.map((st) => {
+      const foundRemote = remoteStock.find((s) => s.estacion === st);
+      const baseRecibido = foundRemote ? foundRemote.stock_recibido : 1000;
+      
+      // Sumar recibido de lotes
+      const lotesEstacion = localBatches.filter((b) => b.estacion === st);
+      const extraRecibido = lotesEstacion.reduce((acc, b) => acc + (b.cantidad || 0), 0);
+
+      // Entregados en esta estación
+      const entregadosEstacion = allDeliveries.filter((d) => d.estacion === st).length;
+
+      return {
+        estacion: st,
+        stock_recibido: baseRecibido + extraRecibido,
+        stock_entregado: entregadosEstacion,
+        stock_minimo_alerta: foundRemote ? foundRemote.stock_minimo_alerta : 100,
+      };
+    });
+
+    setStocks(finalStocks);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (userSession) {
+      fetchData();
+    }
+  }, [userSession]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('telepase_user_session');
+    supabase.auth.signOut();
+    setUserSession(null);
+  };
+
+  const toggleRole = () => {
+    if (!userSession) return;
+    const nuevoRol = userSession.rol === 'Administrador' ? 'Operador' : 'Administrador';
+    const nuevaSesion: UserSession = { ...userSession, rol: nuevoRol };
+    setUserSession(nuevaSesion);
+    localStorage.setItem('telepase_user_session', JSON.stringify(nuevaSesion));
+  };
+
+  // Filtrado de búsquedas
+  const filteredDeliveries = deliveries.filter((d) => {
+    const matchesSearch =
+      d.dominio.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.tag_serial.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.dni_cuit.includes(searchTerm) ||
+      (d.nombre_apellido && d.nombre_apellido.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (d.operador_runner && d.operador_runner.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesStation = selectedStation === 'Todas' || d.estacion === selectedStation;
+
+    return matchesSearch && matchesStation;
+  });
+
+  // Exportar a Excel (.xlsx) nativo
+  const exportToExcel = () => {
+    const excelData = filteredDeliveries.map((d) => ({
+      'ID Registro': d.id,
+      'Fecha y Hora': d.created_at ? new Date(d.created_at).toLocaleString('es-AR') : '',
+      'Estación Peaje': d.estacion,
+      'Dominio / Patente': d.dominio,
+      'Nº Serie TAG RFID': d.tag_serial,
+      'DNI / CUIT': d.dni_cuit,
+      'Nombre y Apellido': d.nombre_apellido || 'N/A',
+      'Usuario / Operador Registrador': d.operador_runner,
+      'Observaciones': d.observaciones || '',
+      'Sincronizado GLM': d.sincronizado_glm ? 'SÍ' : 'NO',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Entregas TAG TelePASE');
+
+    worksheet['!cols'] = [
+      { wch: 36 },
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 12 },
+      { wch: 16 },
+      { wch: 14 },
+      { wch: 24 },
+      { wch: 22 },
+      { wch: 30 },
+      { wch: 15 },
+    ];
+
+    const fechaHoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `Entregas_TAGs_CaminoSelva_${fechaHoy}.xlsx`);
+  };
+
+  // Exportar a CSV
+  const exportToCSV = () => {
+    const headers = 'ID,Fecha_Hora,Estacion,Dominio,TAG_Serial,DNI_CUIT,Nombre_Apellido,Usuario_Operador,Observaciones\n';
+    const rows = filteredDeliveries
+      .map((d) => `${d.id},${d.created_at},${d.estacion},${d.dominio},${d.tag_serial},${d.dni_cuit},"${d.nombre_apellido || ''}","${d.operador_runner}","${d.observaciones || ''}"`)
+      .join('\n');
+    
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `Entregas_TAGs_CaminoSelva_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+  };
+
+  if (!userSession) {
+    return <LoginForm onLoginSuccess={setUserSession} />;
+  }
+
+  const isAdmin = userSession.rol === 'Administrador' || !userSession.rol;
+
+  return (
+    <div className="min-h-screen bg-cs-bg text-slate-900 pb-12">
+      {/* Header Navbar con Navegación y Perfil */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div className="relative h-11 w-44 sm:w-52 flex items-center">
+              <img
+                src="/logo.svg"
+                alt="Camino Selva S.A."
+                className="h-9 sm:h-11 w-auto object-contain"
+              />
+            </div>
+            <div className="hidden md:block h-6 w-px bg-slate-300"></div>
+            <div className="hidden md:block">
+              <h1 className="font-bold text-xs uppercase tracking-wider text-cs-primary">
+                Corredor Vial Noreste
+              </h1>
+              <p className="text-[11px] text-slate-500">Gestión & Control de TAGs TelePASE</p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            {/* Pestañas de Navegación */}
+            <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                  activeTab === 'dashboard'
+                    ? 'bg-cs-primary text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                <span>Entregas</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('settings_batches')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                  activeTab === 'settings_batches'
+                    ? 'bg-cs-primary text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>Alta de TAGs</span>
+              </button>
+
+              {isAdmin && (
+                <button
+                  onClick={() => setActiveTab('settings_users')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                    activeTab === 'settings_users'
+                      ? 'bg-cs-primary text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Usuarios</span>
+                </button>
+              )}
+            </div>
+
+            {/* Badge Usuario + Selector de Rol */}
+            <button
+              onClick={toggleRole}
+              className="flex items-center space-x-2 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs px-3 py-1.5 rounded-xl border border-slate-200 transition text-left"
+              title="Haz clic para cambiar el rol (Administrador / Operador)"
+            >
+              <User className="w-4 h-4 text-cs-primary" />
+              <div className="flex flex-col text-left">
+                <span className="font-bold text-slate-900 leading-tight">{userSession.nombre}</span>
+                <span
+                  className={`text-[9px] font-bold uppercase ${
+                    isAdmin ? 'text-amber-700 font-extrabold' : 'text-teal-700'
+                  }`}
+                >
+                  {userSession.rol || 'Administrador'}
+                </span>
+              </div>
+            </button>
+
+            <button
+              onClick={fetchData}
+              className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
+              title="Recargar Datos"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cs-primary' : ''}`} />
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl transition flex items-center space-x-1 text-xs font-semibold"
+              title="Cerrar Sesión"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Salir</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 mt-6">
+        {/* VISTA 1: ALTA Y RECEPCIÓN DE LOTES DE TAGS */}
+        {activeTab === 'settings_batches' && (
+          <BatchManagement currentUser={userSession} onBatchCreated={fetchData} />
+        )}
+
+        {/* VISTA 2: CONFIGURACIÓN Y USUARIOS (ADMINISTRADORES) */}
+        {activeTab === 'settings_users' && isAdmin && (
+          <UserManagement />
+        )}
+
+        {/* VISTA 3: PANEL PRINCIPAL DE ENTREGAS Y STOCK */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            {/* Tarjetas de Stock por Plaza */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {stocks.map((s) => {
+                const disponible = s.stock_recibido - s.stock_entregado;
+                const bajoStock = disponible <= s.stock_minimo_alerta;
+
+                return (
+                  <div key={s.estacion} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 hover:border-cs-primary/40 transition">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold text-cs-primary uppercase tracking-wide">{s.estacion}</span>
+                      {bajoStock ? (
+                        <AlertTriangle className="w-4 h-4 text-rose-500" />
+                      ) : (
+                        <ShieldCheck className="w-4 h-4 text-cs-primary" />
+                      )}
+                    </div>
+                    <div className="text-2xl font-black text-slate-900">{disponible} <span className="text-xs font-normal text-slate-500">disp.</span></div>
+                    <div className="text-xs text-slate-500 mt-1 flex justify-between">
+                      <span>Entregados: <b className="text-slate-800">{s.stock_entregado}</b></span>
+                      <span>Total Recibido: {s.stock_recibido}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Formulario + Tabla de Registros */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Formulario con usuario autenticado */}
+              <div className="lg:col-span-5">
+                <DeliveryForm currentUser={userSession} onDeliverySuccess={fetchData} />
+              </div>
+
+              {/* Listado Completo de Entregas con Exportación Excel */}
+              <div className="lg:col-span-7 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-2">
+                    <Layers className="w-5 h-5 text-cs-primary" />
+                    <h3 className="font-bold text-base text-slate-900">Listado Completo de Entregas</h3>
+                  </div>
+
+                  {/* Botones de Exportación */}
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={exportToExcel}
+                      className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-sm transition"
+                      title="Descargar reporte en formato Excel (.xlsx)"
+                    >
+                      <FileSpreadsheet className="w-4 h-4" />
+                      <span>Descargar XLS</span>
+                    </button>
+
+                    <button
+                      onClick={exportToCSV}
+                      className="px-3 py-2 bg-cs-primary hover:bg-cs-dark text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-sm transition"
+                      title="Descargar CSV para cruce GLM"
+                    >
+                      <Download className="w-4 h-4 text-cs-accent" />
+                      <span>CSV</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filtros */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Buscar por Patente, TAG, DNI, Usuario..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full p-2.5 pl-9 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-cs-primary"
+                    />
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                  </div>
+
+                  <select
+                    value={selectedStation}
+                    onChange={(e) => setSelectedStation(e.target.value)}
+                    className="p-2.5 text-sm rounded-xl border border-slate-300 font-medium focus:outline-none focus:ring-2 focus:ring-cs-primary bg-slate-50 text-slate-800"
+                  >
+                    <option value="Todas">Todas las Estaciones</option>
+                    <option value="Santa Ana">Santa Ana</option>
+                    <option value="Colonia Victoria">Colonia Victoria</option>
+                    <option value="Paraje Fachinal">Paraje Fachinal</option>
+                    <option value="Ituzaingó">Ituzaingó</option>
+                  </select>
+                </div>
+
+                {/* Tabla con TODA la Información Registrada e Información del Usuario */}
+                <div className="overflow-x-auto max-h-[520px] overflow-y-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-cs-dark text-white sticky top-0 z-10">
+                      <tr>
+                        <th className="p-3">Fecha/Hora</th>
+                        <th className="p-3">Estación</th>
+                        <th className="p-3">Patente *</th>
+                        <th className="p-3">TAG Serial *</th>
+                        <th className="p-3">DNI / CUIT *</th>
+                        <th className="p-3">Nombre Receptor</th>
+                        <th className="p-3">Usuario Registrador</th>
+                        <th className="p-3">Observaciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {filteredDeliveries.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="p-6 text-center text-slate-400">
+                            No se encontraron registros de entrega.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredDeliveries.map((item) => (
+                          <tr key={item.id} className="hover:bg-slate-50 transition">
+                            <td className="p-3 text-slate-500 whitespace-nowrap font-mono text-[11px]">
+                              {item.created_at
+                                ? new Date(item.created_at).toLocaleString('es-AR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : '-'}
+                            </td>
+                            <td className="p-3 font-semibold text-slate-800 whitespace-nowrap">{item.estacion}</td>
+                            <td className="p-3 font-mono font-bold text-slate-900 bg-slate-50/50">{item.dominio}</td>
+                            <td className="p-3 font-mono text-cs-primary font-bold">{item.tag_serial}</td>
+                            <td className="p-3 font-semibold text-slate-800 font-mono">{item.dni_cuit}</td>
+                            <td className="p-3 text-slate-700">{item.nombre_apellido || '-'}</td>
+                            <td className="p-3 font-semibold text-slate-700 whitespace-nowrap bg-emerald-50/40 text-emerald-900">
+                              {item.operador_runner}
+                            </td>
+                            <td className="p-3 text-slate-500 max-w-[150px] truncate">{item.observaciones || '-'}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
