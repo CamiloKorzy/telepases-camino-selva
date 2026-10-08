@@ -61,6 +61,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
               email: found.email,
               nombre: found.nombre,
               rol: found.rol || 'Operador',
+              punto_entrega: found.punto_entrega,
               activo: true,
             };
             localStorage.setItem('telepase_user_session', JSON.stringify(session));
@@ -87,6 +88,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
             email: dbUser.email,
             nombre: dbUser.nombre,
             rol: dbUser.rol,
+            punto_entrega: dbUser.punto_entrega,
             activo: dbUser.activo,
           };
 

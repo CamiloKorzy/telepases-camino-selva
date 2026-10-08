@@ -12,8 +12,12 @@ interface DeliveryFormProps {
 }
 
 export default function DeliveryForm({ currentUser, onDeliverySuccess }: DeliveryFormProps) {
+  const defaultStation = currentUser.punto_entrega && currentUser.punto_entrega !== 'Todos'
+    ? currentUser.punto_entrega
+    : 'Santa Ana';
+
   const [formData, setFormData] = useState<TagDelivery>({
-    estacion: 'Santa Ana',
+    estacion: defaultStation,
     nombre_apellido: '',
     dni_cuit: '',
     dominio: '',
@@ -51,12 +55,15 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
       if (points.length > 0) {
         setDeliveryPoints(points);
-        setFormData((prev) => ({ ...prev, estacion: prev.estacion || points[0] }));
+        const assignedPoint = currentUser.punto_entrega && currentUser.punto_entrega !== 'Todos'
+          ? currentUser.punto_entrega
+          : points[0];
+        setFormData((prev) => ({ ...prev, estacion: assignedPoint }));
       }
     };
 
     loadPoints();
-  }, []);
+  }, [currentUser]);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);

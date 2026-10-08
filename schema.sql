@@ -74,16 +74,17 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     nombre VARCHAR(150) NOT NULL,
     password_hash VARCHAR(100) NOT NULL DEFAULT '123456',
     rol VARCHAR(30) NOT NULL CHECK (rol IN ('Administrador', 'Operador')),
+    punto_entrega VARCHAR(100) DEFAULT 'Todos',
     activo BOOLEAN DEFAULT TRUE NOT NULL,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- CREAR USUARIO ADMINISTRADOR INICIAL
-INSERT INTO public.user_profiles (email, nombre, password_hash, rol, activo)
+INSERT INTO public.user_profiles (email, nombre, password_hash, rol, punto_entrega, activo)
 VALUES 
-    ('camilo.k@ceeenriquez.com', 'Camilo Korzyniewski', 'admin123', 'Administrador', true),
-    ('admin@caminoselva.com', 'Administrador General', 'admin123', 'Administrador', true)
+    ('camilo.k@ceeenriquez.com', 'Camilo Korzyniewski', 'admin123', 'Administrador', 'Todos', true),
+    ('admin@caminoselva.com', 'Administrador General', 'admin123', 'Administrador', 'Todos', true)
 ON CONFLICT (email) DO NOTHING;
 
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;

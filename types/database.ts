@@ -29,6 +29,7 @@ export interface UserProfile {
   nombre: string;
   password_hash?: string;
   rol: 'Administrador' | 'Operador';
+  punto_entrega?: string;
   activo: boolean;
   created_at?: string;
   updated_at?: string;
@@ -38,6 +39,7 @@ export interface UserSession {
   email: string;
   nombre: string;
   rol: 'Administrador' | 'Operador';
+  punto_entrega?: string;
   activo: boolean;
 }
 

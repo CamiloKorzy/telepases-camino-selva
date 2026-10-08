@@ -155,6 +155,9 @@ export default function AntigravityDashboard() {
 
   useEffect(() => {
     if (userSession) {
+      if (userSession.punto_entrega && userSession.punto_entrega !== 'Todos') {
+        setSelectedStation(userSession.punto_entrega);
+      }
       fetchData();
     }
   }, [userSession]);
@@ -331,7 +334,14 @@ export default function AntigravityDashboard() {
             >
               <User className="w-4 h-4 text-cs-primary" />
               <div className="flex flex-col text-left">
-                <span className="font-bold text-slate-900 leading-tight">{userSession.nombre}</span>
+                <div className="flex items-center space-x-1">
+                  <span className="font-bold text-slate-900 leading-tight">{userSession.nombre}</span>
+                  {userSession.punto_entrega && (
+                    <span className="text-[10px] text-emerald-800 bg-emerald-100 font-bold px-1.5 py-0.2 rounded">
+                      {userSession.punto_entrega}
+                    </span>
+                  )}
+                </div>
                 <span
                   className={`text-[9px] font-bold uppercase ${
                     isAdmin ? 'text-amber-700 font-extrabold' : 'text-teal-700'
@@ -386,9 +396,22 @@ export default function AntigravityDashboard() {
               {stocks.map((s) => {
                 const disponible = s.stock_recibido - s.stock_entregado;
                 const bajoStock = disponible <= s.stock_minimo_alerta;
+                const isMyPoint = userSession.punto_entrega === s.estacion;
 
                 return (
-                  <div key={s.estacion} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 hover:border-cs-primary/40 transition">
+                  <div
+                    key={s.estacion}
+                    className={`p-4 rounded-2xl shadow-sm border transition relative ${
+                      isMyPoint
+                        ? 'bg-emerald-50/50 border-cs-primary ring-2 ring-cs-primary/30'
+                        : 'bg-white border-slate-200/80 hover:border-cs-primary/40'
+                    }`}
+                  >
+                    {isMyPoint && (
+                      <span className="absolute -top-2.5 left-3 bg-cs-primary text-white text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shadow-xs">
+                        Mi Punto de Entrega
+                      </span>
+                    )}
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[11px] font-bold text-cs-primary uppercase tracking-wide truncate max-w-[130px]">{s.estacion}</span>
                       {bajoStock ? (

@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { UserProfile } from '@/types/database';
-import { UserPlus, Shield, UserCheck, UserX, AlertCircle, CheckCircle2, RefreshCw, Key, Info, Edit, X, Save } from 'lucide-react';
+import { UserProfile, PeajeStock } from '@/types/database';
+import { UserPlus, Shield, UserCheck, UserX, AlertCircle, CheckCircle2, RefreshCw, Key, Info, Edit, X, Save, MapPin } from 'lucide-react';
 
 const LOCAL_USERS_KEY = 'telepase_registered_user_profiles';
 
@@ -14,6 +14,7 @@ const DEFAULT_USERS: UserProfile[] = [
     nombre: 'Camilo Korzyniewski',
     password_hash: 'admin123',
     rol: 'Administrador',
+    punto_entrega: 'Todos',
     activo: true,
   },
   {
@@ -22,6 +23,7 @@ const DEFAULT_USERS: UserProfile[] = [
     nombre: 'Administrador General',
     password_hash: 'admin123',
     rol: 'Administrador',
+    punto_entrega: 'Todos',
     activo: true,
   },
   {
@@ -30,12 +32,19 @@ const DEFAULT_USERS: UserProfile[] = [
     nombre: 'Camilo Korzyniewski',
     password_hash: 'admin123',
     rol: 'Administrador',
+    punto_entrega: 'Santa Ana',
     activo: true,
   },
 ];
 
 export default function UserManagement() {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [deliveryPoints, setDeliveryPoints] = useState<string[]>([
+    'Santa Ana',
+    'Colonia Victoria',
+    'Paraje Fachinal',
+    'Ituzaingó',
+  ]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -46,6 +55,7 @@ export default function UserManagement() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rol, setRol] = useState<'Administrador' | 'Operador'>('Operador');
+  const [puntoEntrega, setPuntoEntrega] = useState<string>('Santa Ana');
 
   // Estado para usuario en edición
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
@@ -53,10 +63,36 @@ export default function UserManagement() {
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editRol, setEditRol] = useState<'Administrador' | 'Operador'>('Operador');
+  const [editPuntoEntrega, setEditPuntoEntrega] = useState<string>('Santa Ana');
+
+  // Cargar Puntos de Entrega dinámicos
+  const loadDeliveryPoints = async () => {
+    let points: string[] = [];
+    const stored = localStorage.getItem('telepase_local_delivery_points');
+    if (stored) {
+      try {
+        const list: PeajeStock[] = JSON.parse(stored);
+        if (list.length > 0) points = list.map((p) => p.estacion);
+      } catch {}
+    }
+
+    try {
+      const { data } = await supabase.from('peaje_stock').select('estacion');
+      if (data && data.length > 0) {
+        const remoteNames = data.map((d) => d.estacion);
+        points = Array.from(new Set([...points, ...remoteNames]));
+      }
+    } catch {}
+
+    const defaultList = ['Santa Ana', 'Colonia Victoria', 'Paraje Fachinal', 'Ituzaingó'];
+    const finalList = Array.from(new Set([...defaultList, ...points]));
+    setDeliveryPoints(finalList);
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
     setIsOfflineMode(false);
+    await loadDeliveryPoints();
 
     try {
       const { data, error } = await supabase
@@ -76,8 +112,7 @@ export default function UserManagement() {
       if (stored) {
         try {
           const parsed: UserProfile[] = JSON.parse(stored);
-          // Asegurar que camilo.k@ceeenriquez.com esté presente
-          if (!parsed.some(u => u.email === 'camilo.k@ceeenriquez.com')) {
+          if (!parsed.some((u) => u.email === 'camilo.k@ceeenriquez.com')) {
             parsed.unshift(DEFAULT_USERS[0]);
           }
           setUsers(parsed);
@@ -116,18 +151,22 @@ export default function UserManagement() {
       nombre: nombre.trim(),
       password_hash: password,
       rol: rol,
+      punto_entrega: puntoEntrega,
       activo: true,
       created_at: new Date().toISOString(),
     };
 
     try {
-      const { error } = await supabase.from('user_profiles').insert([{
-        email: newUser.email,
-        nombre: newUser.nombre,
-        password_hash: newUser.password_hash,
-        rol: newUser.rol,
-        activo: newUser.activo,
-      }]);
+      const { error } = await supabase.from('user_profiles').insert([
+        {
+          email: newUser.email,
+          nombre: newUser.nombre,
+          password_hash: newUser.password_hash,
+          rol: newUser.rol,
+          punto_entrega: newUser.punto_entrega,
+          activo: newUser.activo,
+        },
+      ]);
 
       if (error) {
         if (error.code === '23505') {
@@ -142,19 +181,20 @@ export default function UserManagement() {
       }
     }
 
-    const updatedUsers = [newUser, ...users.filter(u => u.email !== newUser.email)];
+    const updatedUsers = [newUser, ...users.filter((u) => u.email !== newUser.email)];
     setUsers(updatedUsers);
     localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updatedUsers));
 
     setMessage({
       type: 'success',
-      text: `¡Usuario "${nombre}" (${rol}) dado de alta exitosamente!`,
+      text: `¡Usuario "${nombre}" (${rol}) asignado a "${puntoEntrega}" dado de alta exitosamente!`,
     });
 
     setNombre('');
     setEmail('');
     setPassword('');
     setRol('Operador');
+    setPuntoEntrega(deliveryPoints[0] || 'Santa Ana');
     setSubmitting(false);
   };
 
@@ -164,6 +204,7 @@ export default function UserManagement() {
     setEditEmail(user.email);
     setEditPassword(user.password_hash || '');
     setEditRol(user.rol);
+    setEditPuntoEntrega(user.punto_entrega || deliveryPoints[0] || 'Santa Ana');
   };
 
   const cancelEditUser = () => {
@@ -185,6 +226,7 @@ export default function UserManagement() {
       email: emailClean,
       password_hash: editPassword,
       rol: editRol,
+      punto_entrega: editPuntoEntrega,
       updated_at: new Date().toISOString(),
     };
 
@@ -196,6 +238,7 @@ export default function UserManagement() {
           email: updatedUserData.email,
           password_hash: updatedUserData.password_hash,
           rol: updatedUserData.rol,
+          punto_entrega: updatedUserData.punto_entrega,
           updated_at: updatedUserData.updated_at,
         })
         .eq('email', editingUser.email);
@@ -251,7 +294,7 @@ export default function UserManagement() {
           <div className="flex items-center space-x-2">
             <Info className="w-4 h-4 text-amber-600 flex-shrink-0" />
             <span>
-              <b>Modo Almacenamiento Local Activo</b>: Los usuarios se están guardando localmente. Para sincronización remota en tiempo real, configura las credenciales de Supabase en <code className="bg-amber-100 px-1 rounded">.env.local</code>.
+              <b>Modo Almacenamiento Local Activo</b>: Los usuarios se están guardando localmente.
             </span>
           </div>
         </div>
@@ -275,7 +318,7 @@ export default function UserManagement() {
           </div>
 
           <form onSubmit={handleUpdateUser} className="p-5 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
               <div>
                 <label className="block text-xs font-bold text-amber-900 uppercase mb-1">Nombre y Apellido *</label>
                 <input
@@ -320,6 +363,22 @@ export default function UserManagement() {
                   <option value="Administrador">Administrador (Control Total)</option>
                 </select>
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-amber-900 uppercase mb-1">Punto de Entrega *</label>
+                <select
+                  value={editPuntoEntrega}
+                  onChange={(e) => setEditPuntoEntrega(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-amber-300 text-xs font-bold focus:ring-2 focus:ring-amber-700 focus:outline-none bg-white text-slate-800"
+                >
+                  <option value="Todos">Todos (Acceso Global)</option>
+                  {deliveryPoints.map((pt) => (
+                    <option key={pt} value={pt}>
+                      {pt}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="flex items-center space-x-3 pt-2">
@@ -352,7 +411,7 @@ export default function UserManagement() {
             <h3 className="font-bold text-base">Dar de Alta Nuevo Usuario</h3>
           </div>
           <span className="text-[11px] font-bold bg-white/10 text-emerald-200 px-3 py-1 rounded-full border border-white/15">
-            Configuración & Roles
+            Configuración & Asignación
           </span>
         </div>
 
@@ -374,7 +433,7 @@ export default function UserManagement() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
             <div>
               <label className="block text-xs font-bold text-cs-primary uppercase mb-1">Nombre y Apellido *</label>
               <input
@@ -425,6 +484,22 @@ export default function UserManagement() {
                 <option value="Administrador">Administrador (Control Total)</option>
               </select>
             </div>
+
+            <div>
+              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">Punto de Entrega Asignado *</label>
+              <select
+                value={puntoEntrega}
+                onChange={(e) => setPuntoEntrega(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-slate-50 text-slate-800"
+              >
+                <option value="Todos">Todos (Acceso Global)</option>
+                {deliveryPoints.map((pt) => (
+                  <option key={pt} value={pt}>
+                    {pt}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <button
@@ -461,6 +536,7 @@ export default function UserManagement() {
                 <th className="p-3">Nombre y Apellido</th>
                 <th className="p-3">Email / Usuario</th>
                 <th className="p-3">Rol</th>
+                <th className="p-3">Punto de Entrega Asignado</th>
                 <th className="p-3">Estado</th>
                 <th className="p-3 text-center">Acciones</th>
               </tr>
@@ -481,6 +557,12 @@ export default function UserManagement() {
                       {u.rol}
                     </span>
                   </td>
+                  <td className="p-3 font-bold text-slate-800">
+                    <span className="inline-flex items-center space-x-1 bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg">
+                      <MapPin className="w-3 h-3 text-cs-primary" />
+                      <span>{u.punto_entrega || 'Santa Ana'}</span>
+                    </span>
+                  </td>
                   <td className="p-3">
                     {u.activo ? (
                       <span className="inline-flex items-center space-x-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
@@ -499,7 +581,7 @@ export default function UserManagement() {
                       <button
                         onClick={() => startEditUser(u)}
                         className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-xl text-xs font-bold transition flex items-center space-x-1"
-                        title="Modificar nombre, email, clave o rol"
+                        title="Modificar nombre, email, clave, rol o punto de entrega"
                       >
                         <Edit className="w-3.5 h-3.5" />
                         <span>Editar</span>
