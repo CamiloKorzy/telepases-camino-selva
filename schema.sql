@@ -1,9 +1,28 @@
 -- =====================================================================
 -- PROYECTO CORREDOR NORESTE - CAMINO SELVA S.A.
--- APLICACIÓN ANTIGRAVITY: REGISTRO Y CONTROL DE TAGS TELEPASE
+-- APLICACIÓN TELEPASES: REGISTRO Y CONTROL DE TAGS TELEPASE
 -- =====================================================================
 
--- 1. TABLA MAESTRA DE ENTREGAS EN VÍA (7 DATOS CLAVE)
+-- 0. LIMPIEZA PREVIA DE TRIGGERS Y POLÍTICAS (EJECUCIÓN IDEMPOTENTE)
+DROP TRIGGER IF EXISTS trg_update_stock_on_delivery ON public.tag_deliveries;
+DROP FUNCTION IF EXISTS update_stock_on_delivery();
+
+DROP POLICY IF EXISTS "Permitir lectura publica de entregas" ON public.tag_deliveries;
+DROP POLICY IF EXISTS "Permitir insercion de entregas" ON public.tag_deliveries;
+DROP POLICY IF EXISTS "Permitir todo en entregas" ON public.tag_deliveries;
+
+DROP POLICY IF EXISTS "Permitir lectura de stock" ON public.peaje_stock;
+DROP POLICY IF EXISTS "Permitir todo en stock" ON public.peaje_stock;
+
+DROP POLICY IF EXISTS "Permitir lectura publica de usuarios" ON public.user_profiles;
+DROP POLICY IF EXISTS "Permitir insercion y edicion de usuarios" ON public.user_profiles;
+DROP POLICY IF EXISTS "Permitir todo en usuarios" ON public.user_profiles;
+
+DROP POLICY IF EXISTS "Permitir lectura publica de lotes" ON public.tag_batches;
+DROP POLICY IF EXISTS "Permitir insercion de lotes" ON public.tag_batches;
+DROP POLICY IF EXISTS "Permitir todo en lotes" ON public.tag_batches;
+
+-- 1. TABLA MAESTRA DE ENTREGAS EN VÍA (REGISTRO DE ENTREGAS)
 CREATE TABLE IF NOT EXISTS public.tag_deliveries (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -28,46 +47,7 @@ CREATE TABLE IF NOT EXISTS public.peaje_stock (
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- INICIALIZAR LOS PUNTOS DE ENTREGA INICIALES
-INSERT INTO public.peaje_stock (estacion, stock_recibido, stock_minimo_alerta)
-VALUES 
-    ('Santa Ana', 2000, 150),
-    ('Colonia Victoria', 1500, 100),
-    ('Paraje Fachinal', 1000, 100),
-    ('Ituzaingó', 1500, 100)
-ON CONFLICT (estacion) DO NOTHING;
-
--- 3. TRIGGER AUTOMÁTICO DE ACTUALIZACIÓN DE STOCK AL REGISTRAR ENTREGA
-CREATE OR REPLACE FUNCTION update_stock_on_delivery()
-RETURNS TRIGGER AS $$
-BEGIN
-    UPDATE public.peaje_stock
-    SET stock_entregado = stock_entregado + 1,
-        updated_at = timezone('utc'::text, now())
-    WHERE estacion = NEW.estacion;
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE TRIGGER trg_update_stock_on_delivery
-AFTER INSERT ON public.tag_deliveries
-FOR EACH ROW EXECUTE FUNCTION update_stock_on_delivery();
-
--- 4. ÍNDICES DE ALTO RENDIMIENTO PARA CONSULTAS Y CRUCE CON GLM
-CREATE INDEX IF NOT EXISTS idx_tag_deliveries_dominio ON public.tag_deliveries(dominio);
-CREATE INDEX IF NOT EXISTS idx_tag_deliveries_tag_serial ON public.tag_deliveries(tag_serial);
-CREATE INDEX IF NOT EXISTS idx_tag_deliveries_estacion ON public.tag_deliveries(estacion);
-CREATE INDEX IF NOT EXISTS idx_tag_deliveries_created_at ON public.tag_deliveries(created_at DESC);
-
--- 5. POLÍTICAS DE SEGURIDAD (ROW LEVEL SECURITY - RLS)
-ALTER TABLE public.tag_deliveries ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.peaje_stock ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Permitir lectura publica de entregas" ON public.tag_deliveries FOR SELECT USING (true);
-CREATE POLICY "Permitir insercion de entregas" ON public.tag_deliveries FOR INSERT WITH CHECK (true);
-CREATE POLICY "Permitir lectura de stock" ON public.peaje_stock FOR SELECT USING (true);
-
--- 6. TABLA DE GESTIÓN DE USUARIOS Y ROLES (ADMINISTRADOR Y OPERADOR)
+-- 3. TABLA DE GESTIÓN DE USUARIOS Y ROLES (ADMINISTRADOR Y OPERADOR)
 CREATE TABLE IF NOT EXISTS public.user_profiles (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     email VARCHAR(150) NOT NULL UNIQUE,
@@ -80,18 +60,14 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     updated_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- CREAR USUARIO ADMINISTRADOR INICIAL
+-- CREAR USUARIOS ADMINISTRADORES INICIALES DE PRUEBA / SISTEMA
 INSERT INTO public.user_profiles (email, nombre, password_hash, rol, punto_entrega, activo)
 VALUES 
     ('camilo.k@ceeenriquez.com', 'Camilo Korzyniewski', 'admin123', 'Administrador', 'Todos', true),
     ('admin@caminoselva.com', 'Administrador General', 'admin123', 'Administrador', 'Todos', true)
 ON CONFLICT (email) DO NOTHING;
 
-ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Permitir lectura publica de usuarios" ON public.user_profiles FOR SELECT USING (true);
-CREATE POLICY "Permitir insercion y edicion de usuarios" ON public.user_profiles FOR ALL USING (true);
-
--- 7. TABLA DE ALTA DE LOTES DE TAGS POR PUNTO DE ENTREGA (INVENTARIO NUMERADO)
+-- 4. TABLA DE ALTA DE LOTES DE TAGS POR PUNTO DE ENTREGA (RECEPCIONES / INVENTARIO)
 CREATE TABLE IF NOT EXISTS public.tag_batches (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -105,6 +81,36 @@ CREATE TABLE IF NOT EXISTS public.tag_batches (
     usuario_registro VARCHAR(100) NOT NULL
 );
 
+-- 5. ÍNDICES DE ALTO RENDIMIENTO PARA CONSULTAS
+CREATE INDEX IF NOT EXISTS idx_tag_deliveries_dominio ON public.tag_deliveries(dominio);
+CREATE INDEX IF NOT EXISTS idx_tag_deliveries_tag_serial ON public.tag_deliveries(tag_serial);
+CREATE INDEX IF NOT EXISTS idx_tag_deliveries_estacion ON public.tag_deliveries(estacion);
+CREATE INDEX IF NOT EXISTS idx_tag_deliveries_created_at ON public.tag_deliveries(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tag_batches_estacion ON public.tag_batches(estacion);
+
+-- 6. HABILITAR ROW LEVEL SECURITY (RLS) Y POLÍTICAS DE ACCESO TOTAL (SELECT, INSERT, UPDATE, DELETE)
+ALTER TABLE public.tag_deliveries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.peaje_stock ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tag_batches ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Permitir lectura publica de lotes" ON public.tag_batches FOR SELECT USING (true);
-CREATE POLICY "Permitir insercion de lotes" ON public.tag_batches FOR ALL USING (true);
+
+CREATE POLICY "Permitir todo en entregas" ON public.tag_deliveries FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo en stock" ON public.peaje_stock FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo en usuarios" ON public.user_profiles FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo en lotes" ON public.tag_batches FOR ALL USING (true) WITH CHECK (true);
+
+-- 7. TRIGGER AUTOMÁTICO DE ACTUALIZACIÓN DE STOCK AL REGISTRAR ENTREGA
+CREATE OR REPLACE FUNCTION update_stock_on_delivery()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE public.peaje_stock
+    SET stock_entregado = stock_entregado + 1,
+        updated_at = timezone('utc'::text, now())
+    WHERE estacion = NEW.estacion;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_stock_on_delivery
+AFTER INSERT ON public.tag_deliveries
+FOR EACH ROW EXECUTE FUNCTION update_stock_on_delivery();
