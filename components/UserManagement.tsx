@@ -58,7 +58,6 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [isOfflineMode, setIsOfflineMode] = useState(false);
 
   // Formulario nuevo usuario
   const [nombre, setNombre] = useState('');
@@ -89,7 +88,7 @@ export default function UserManagement() {
   }, []);
 
   const fetchUsers = async () => {
-    // 1. Cargar almacenamiento local de inmediato (0ms delay)
+    // 1. Cargar desde almacenamiento local para renderizado instantáneo (0ms)
     let localUsers: UserProfile[] = [];
     const stored = localStorage.getItem(LOCAL_USERS_KEY);
     if (stored) {
@@ -108,40 +107,52 @@ export default function UserManagement() {
 
     setUsers(localUsers);
     setLoading(false);
-
     loadDeliveryPoints();
 
-    // 2. Consultar Supabase en segundo plano con timeout rápido (1.5s)
+    // 2. Consultar Supabase como Fuente de Verdad principal
     try {
-      const fetchPromise = supabase
+      const { data: dbUsers, error } = await supabase
         .from('user_profiles')
         .select('*')
         .order('created_at', { ascending: false });
-      const timeoutPromise = new Promise<{ data: null }>((resolve) =>
-        setTimeout(() => resolve({ data: null }), 1500)
-      );
 
-      const res = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+      if (!error && dbUsers) {
+        let finalUsers = dbUsers;
 
-      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
-        setIsOfflineMode(false);
-        const userMap = new Map<string, UserProfile>();
-        res.data.forEach((u: UserProfile) => userMap.set(u.email.toLowerCase(), u));
-        localUsers.forEach((u: UserProfile) => {
-          if (!userMap.has(u.email.toLowerCase())) {
-            userMap.set(u.email.toLowerCase(), u);
-          }
-        });
+        // Auto-sincronizar cuentas administradoras por defecto si la BD en Supabase está vacía o incompleta
+        const missingDefaults = DEFAULT_USERS.filter(
+          (def) => !finalUsers.some((u) => u.email.toLowerCase() === def.email.toLowerCase())
+        );
 
-        const mergedList = Array.from(userMap.values());
-        setUsers(mergedList);
-        localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(mergedList));
-      } else {
-        setIsOfflineMode(true);
+        if (missingDefaults.length > 0) {
+          try {
+            await supabase.from('user_profiles').upsert(
+              missingDefaults.map((u) => ({
+                email: u.email.toLowerCase(),
+                nombre: u.nombre,
+                password_hash: u.password_hash,
+                rol: u.rol,
+                punto_entrega: u.punto_entrega,
+                activo: u.activo,
+              })),
+              { onConflict: 'email' }
+            );
+
+            const { data: refreshedUsers } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .order('created_at', { ascending: false });
+
+            if (refreshedUsers && refreshedUsers.length > 0) {
+              finalUsers = refreshedUsers;
+            }
+          } catch {}
+        }
+
+        setUsers(finalUsers);
+        localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(finalUsers));
       }
-    } catch {
-      setIsOfflineMode(true);
-    }
+    } catch {}
   };
 
   useEffect(() => {
@@ -161,49 +172,44 @@ export default function UserManagement() {
       return;
     }
 
-    const newUser: UserProfile = {
-      id: crypto.randomUUID(),
+    const newUserPayload = {
       email: emailClean,
       nombre: nombre.trim(),
       password_hash: password,
       rol: rol,
       punto_entrega: puntoEntrega,
       activo: true,
-      created_at: new Date().toISOString(),
     };
 
-    try {
-      const { error } = await supabase.from('user_profiles').insert([
-        {
-          email: newUser.email,
-          nombre: newUser.nombre,
-          password_hash: newUser.password_hash,
-          rol: newUser.rol,
-          punto_entrega: newUser.punto_entrega,
-          activo: newUser.activo,
-        },
-      ]);
+    // 1. Guardar de forma obligatoria en la base de datos Supabase
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .insert([newUserPayload])
+      .select();
 
-      if (error) {
-        if (error.code === '23505') {
-          throw new Error(`El usuario "${emailClean}" ya fue registrado.`);
-        }
+    if (error) {
+      if (error.code === '23505') {
+        setMessage({ type: 'error', text: `El usuario "${emailClean}" ya fue registrado en Supabase.` });
+      } else {
+        setMessage({ type: 'error', text: `Error al registrar en Supabase: ${error.message}` });
       }
-    } catch (err: any) {
-      if (err.message && err.message.includes('ya fue registrado')) {
-        setMessage({ type: 'error', text: err.message });
-        setSubmitting(false);
-        return;
-      }
+      setSubmitting(false);
+      return;
     }
 
-    const updatedUsers = [newUser, ...users.filter((u) => u.email !== newUser.email)];
+    // 2. Si fue exitoso en Supabase, actualizar vista y caché local
+    const createdUser: UserProfile =
+      data && data[0]
+        ? data[0]
+        : { id: crypto.randomUUID(), ...newUserPayload, created_at: new Date().toISOString() };
+
+    const updatedUsers = [createdUser, ...users.filter((u) => u.email !== createdUser.email)];
     setUsers(updatedUsers);
     localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updatedUsers));
 
     setMessage({
       type: 'success',
-      text: `¡Usuario "${nombre}" (${rol}) asignado a "${puntoEntrega}" dado de alta exitosamente!`,
+      text: `¡Usuario "${nombre}" (${rol}) asignado a "${puntoEntrega}" dado de alta exitosamente en Supabase!`,
     });
 
     setNombre('');
@@ -246,22 +252,26 @@ export default function UserManagement() {
       updated_at: new Date().toISOString(),
     };
 
-    try {
-      await supabase
-        .from('user_profiles')
-        .update({
-          nombre: updatedUserData.nombre,
-          email: updatedUserData.email,
-          password_hash: updatedUserData.password_hash,
-          rol: updatedUserData.rol,
-          punto_entrega: updatedUserData.punto_entrega,
-          updated_at: updatedUserData.updated_at,
-        })
-        .eq('email', editingUser.email);
-    } catch {
-      // Ignorar error si está offline
+    // 1. Guardar cambios obligatoriamente en Supabase
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({
+        nombre: updatedUserData.nombre,
+        email: updatedUserData.email,
+        password_hash: updatedUserData.password_hash,
+        rol: updatedUserData.rol,
+        punto_entrega: updatedUserData.punto_entrega,
+        updated_at: updatedUserData.updated_at,
+      })
+      .eq('email', editingUser.email);
+
+    if (error) {
+      setMessage({ type: 'error', text: `Error al actualizar en Supabase: ${error.message}` });
+      setSubmitting(false);
+      return;
     }
 
+    // 2. Si fue exitoso en Supabase, actualizar vista local
     const updatedUsers = users.map((u) =>
       u.email === editingUser.email || u.id === editingUser.id ? updatedUserData : u
     );
@@ -291,7 +301,7 @@ export default function UserManagement() {
 
     setMessage({
       type: 'success',
-      text: `¡Usuario "${updatedUserData.nombre}" actualizado correctamente!`,
+      text: `¡Usuario "${updatedUserData.nombre}" actualizado correctamente en Supabase!`,
     });
 
     setEditingUser(null);
@@ -306,13 +316,15 @@ export default function UserManagement() {
       return;
     }
 
-    try {
-      await supabase
-        .from('user_profiles')
-        .update({ activo: nuevoEstado, updated_at: new Date().toISOString() })
-        .eq('email', user.email);
-    } catch {
-      // Ignorar error si está offline
+    // Guardar cambio obligatoriamente en Supabase
+    const { error } = await supabase
+      .from('user_profiles')
+      .update({ activo: nuevoEstado, updated_at: new Date().toISOString() })
+      .eq('email', user.email);
+
+    if (error) {
+      alert(`Error al actualizar en Supabase: ${error.message}`);
+      return;
     }
 
     const updatedUsers = users.map((u) =>
@@ -325,16 +337,6 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-6">
-      {isOfflineMode && (
-        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Info className="w-4 h-4 text-amber-600 flex-shrink-0" />
-            <span>
-              <b>Modo Almacenamiento Local Activo</b>: Los usuarios se están guardando localmente.
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* FORMULARIO DE EDICIÓN */}
       {editingUser && (
