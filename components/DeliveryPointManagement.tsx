@@ -20,6 +20,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
   const [nombre, setNombre] = useState<string>('');
   const [stockRecibido, setStockRecibido] = useState<number>(0);
   const [stockMinimo, setStockMinimo] = useState<number>(100);
+  const [emailNotificacion, setEmailNotificacion] = useState<string>('');
   const [editingStation, setEditingStation] = useState<string | null>(null);
 
   // Cargar Puntos de Entrega del Maestro
@@ -62,6 +63,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
       stock_recibido: Number(stockRecibido) || 0,
       stock_entregado: editingStation ? existing?.stock_entregado || 0 : 0,
       stock_minimo_alerta: Number(stockMinimo) || 100,
+      email_notificacion: emailNotificacion.trim() || undefined,
       updated_at: new Date().toISOString(),
     };
 
@@ -79,6 +81,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
     setNombre('');
     setStockRecibido(0);
     setStockMinimo(100);
+    setEmailNotificacion('');
     setEditingStation(null);
     setSubmitting(false);
 
@@ -90,6 +93,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
     setNombre(p.estacion);
     setStockRecibido(p.stock_recibido);
     setStockMinimo(p.stock_minimo_alerta);
+    setEmailNotificacion(p.email_notificacion || '');
     setMessage(null);
   };
 
@@ -98,6 +102,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
     setNombre('');
     setStockRecibido(0);
     setStockMinimo(100);
+    setEmailNotificacion('');
   };
 
   const [confirmModalState, setConfirmModalState] = useState<{
@@ -167,7 +172,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
               Nombre del Punto de Entrega *
@@ -212,7 +217,20 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
             />
           </div>
 
-          <div className="md:col-span-3 flex justify-end space-x-3 pt-2">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1">
+              Email Notificación Reporte / Alertas
+            </label>
+            <input
+              type="email"
+              placeholder="ej: santaana@caminoselva.com"
+              value={emailNotificacion}
+              onChange={(e) => setEmailNotificacion(e.target.value)}
+              className="w-full p-2.5 text-sm rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-cs-primary font-mono"
+            />
+          </div>
+
+          <div className="md:col-span-4 flex justify-end space-x-3 pt-2">
             {editingStation && (
               <button
                 type="button"
@@ -247,6 +265,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
             <thead className="bg-cs-dark text-white">
               <tr>
                 <th className="p-3">Punto de Entrega</th>
+                <th className="p-3">Email Notificación Destino</th>
                 <th className="p-3">Stock Recibido</th>
                 <th className="p-3">Stock Entregado</th>
                 <th className="p-3">Stock Disponible</th>
@@ -258,7 +277,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
             <tbody className="divide-y divide-slate-200">
               {points.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-slate-400">
+                  <td colSpan={8} className="p-6 text-center text-slate-400">
                     No hay Puntos de Entrega registrados en el Maestro.
                   </td>
                 </tr>
@@ -270,6 +289,15 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
                   return (
                     <tr key={p.estacion} className="hover:bg-slate-50 transition">
                       <td className="p-3 font-bold text-slate-900 text-sm">{p.estacion}</td>
+                      <td className="p-3 font-mono text-slate-600">
+                        {p.email_notificacion ? (
+                          <span className="bg-sky-50 text-sky-800 px-2 py-0.5 rounded border border-sky-200">
+                            {p.email_notificacion}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 italic">No configurado</span>
+                        )}
+                      </td>
                       <td className="p-3 font-mono font-semibold text-slate-800">{p.stock_recibido}</td>
                       <td className="p-3 font-mono font-semibold text-emerald-800">{p.stock_entregado}</td>
                       <td className="p-3 font-mono font-bold text-slate-900 text-sm">{disponible}</td>

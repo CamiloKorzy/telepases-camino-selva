@@ -19,6 +19,7 @@ export interface PeajeStock {
   stock_entregado: number;
   stock_minimo_alerta: number;
   pendientes_recepcion?: number;
+  email_notificacion?: string;
   updated_at?: string;
 }
 
@@ -29,7 +30,7 @@ export interface UserProfile {
   email: string;
   nombre: string;
   password_hash?: string;
-  rol: 'Administrador' | 'Operador';
+  rol: 'Administrador' | 'Operador' | 'Consulta';
   punto_entrega?: string;
   activo: boolean;
   created_at?: string;
@@ -39,7 +40,7 @@ export interface UserProfile {
 export interface UserSession {
   email: string;
   nombre: string;
-  rol: 'Administrador' | 'Operador';
+  rol: 'Administrador' | 'Operador' | 'Consulta';
   punto_entrega?: string;
   activo: boolean;
 }

@@ -190,6 +190,13 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
       <div className="p-5 space-y-4">
         {/* Mensajes de notificación */}
+        {currentUser.rol === 'Consulta' && (
+          <div className="p-3 bg-sky-50 border border-sky-200 text-sky-900 text-xs font-bold rounded-xl flex items-center space-x-2">
+            <AlertCircle className="w-5 h-5 text-sky-600 flex-shrink-0" />
+            <span>MODO SOLO LECTURA: Su usuario Auditor / Consulta de Inventarios no tiene permisos para registrar entregas de TAGs.</span>
+          </div>
+        )}
+
         {message && (
           <div
             className={`p-3 rounded-xl flex items-center space-x-2 text-sm font-medium ${
@@ -313,11 +320,17 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           {/* Botón de Envío */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || currentUser.rol === 'Consulta'}
             className="w-full py-4 bg-cs-primary hover:bg-cs-dark active:bg-cs-dark/90 text-white font-bold text-base rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50"
           >
             <Save className="w-5 h-5" />
-            <span>{loading ? 'Registrando en Vía...' : 'GUARDAR Y REGISTRAR ENTREGA'}</span>
+            <span>
+              {currentUser.rol === 'Consulta'
+                ? 'SOLO LECTURA (REGISTRO DESHABILITADO)'
+                : loading
+                ? 'Registrando en Vía...'
+                : 'GUARDAR Y REGISTRAR ENTREGA'}
+            </span>
           </button>
         </form>
       </div>

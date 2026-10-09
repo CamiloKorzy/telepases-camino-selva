@@ -10,8 +10,9 @@ import UserManagement from '@/components/UserManagement';
 import BatchManagement from '@/components/BatchManagement';
 import DeliveryPointManagement from '@/components/DeliveryPointManagement';
 import TransferManagement from '@/components/TransferManagement';
+import ScheduledReportModal from '@/components/ScheduledReportModal';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck } from 'lucide-react';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 
 export default function AntigravityDashboard() {
@@ -23,6 +24,7 @@ export default function AntigravityDashboard() {
   const [selectedStation, setSelectedStation] = useState<string>('Todas');
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users'>('dashboard');
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   // Estado para edición de entrega por Administrador
   const [editingDelivery, setEditingDelivery] = useState<TagDelivery | null>(null);
@@ -514,10 +516,14 @@ export default function AntigravityDashboard() {
                 </div>
                 <span
                   className={`text-[9px] font-bold uppercase ${
-                    isAdmin ? 'text-amber-700 font-extrabold' : 'text-teal-700'
+                    userSession.rol === 'Consulta'
+                      ? 'text-sky-700 font-extrabold bg-sky-100 px-1.5 py-0.5 rounded border border-sky-300'
+                      : isAdmin
+                      ? 'text-amber-700 font-extrabold'
+                      : 'text-teal-700'
                   }`}
                 >
-                  {userSession.rol || 'Operador'}
+                  {userSession.rol === 'Consulta' ? 'CONSULTA (SOLO LECTURA)' : userSession.rol || 'Operador'}
                 </span>
               </div>
             </div>
@@ -654,6 +660,15 @@ export default function AntigravityDashboard() {
 
                   {/* Botones de Exportación */}
                   <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setIsReportModalOpen(true)}
+                      className="px-3 py-2 bg-sky-700 hover:bg-sky-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-sm transition"
+                      title="Configurar y ejecutar envío programado de reportes de inventario por Punto de Entrega"
+                    >
+                      <Mail className="w-4 h-4 text-sky-200" />
+                      <span>Envío Mails</span>
+                    </button>
+
                     <button
                       onClick={exportToExcel}
                       className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-sm transition"
@@ -890,6 +905,12 @@ export default function AntigravityDashboard() {
           </div>
         </div>
       )}
+
+      <ScheduledReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        stocks={stocks}
+      />
 
       <ConfirmModal
         isOpen={confirmModalState.isOpen}

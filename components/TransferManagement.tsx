@@ -386,6 +386,13 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
         </div>
 
         <form onSubmit={handleSaveTransfer} className="p-5 space-y-5">
+          {currentUser.rol === 'Consulta' && (
+            <div className="p-3 bg-sky-50 border border-sky-200 text-sky-900 text-xs font-bold rounded-xl flex items-center space-x-2">
+              <AlertCircle className="w-5 h-5 text-sky-600 flex-shrink-0" />
+              <span>MODO SOLO LECTURA: Su usuario Auditor / Consulta de Inventarios no tiene permisos para crear movimientos o confirmar recepciones.</span>
+            </div>
+          )}
+
           {message && (
             <div
               className={`p-3 rounded-xl flex items-center space-x-2 text-xs font-medium ${
@@ -589,12 +596,14 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || currentUser.rol === 'Consulta'}
             className="w-full py-3 bg-cs-primary hover:bg-cs-dark text-white font-bold text-xs rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 uppercase tracking-wider"
           >
             <Truck className="w-4 h-4 text-cs-accent" />
             <span>
-              {submitting
+              {currentUser.rol === 'Consulta'
+                ? 'SOLO LECTURA (REGISTRO DESHABILITADO)'
+                : submitting
                 ? 'Registrando Envío...'
                 : `🚚 REGISTRAR ENVÍO (${totalTagsInForm.toLocaleString('es-AR')} TAGs DE ${origen.toUpperCase()} A ${destino.toUpperCase()})`}
             </span>
@@ -681,7 +690,7 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
                 </tr>
               ) : (
                 filteredTransfers.map((t, idx) => {
-                  const canConfirm = t.estado === 'En Tránsito' && (isAdmin || matchStation(t.destino, currentUser.punto_entrega));
+                  const canConfirm = currentUser.rol !== 'Consulta' && t.estado === 'En Tránsito' && (isAdmin || matchStation(t.destino, currentUser.punto_entrega));
 
                   return (
                     <tr key={t.id || idx} className="hover:bg-slate-50 transition">

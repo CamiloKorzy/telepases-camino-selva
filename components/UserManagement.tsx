@@ -46,6 +46,15 @@ const DEFAULT_USERS: UserProfile[] = [
     punto_entrega: 'Santa Ana',
     activo: true,
   },
+  {
+    id: '5',
+    email: 'consulta@caminoselva.com',
+    nombre: 'Auditor / Consulta Inventario',
+    password_hash: 'consulta123',
+    rol: 'Consulta',
+    punto_entrega: 'Todos',
+    activo: true,
+  },
 ];
 
 export default function UserManagement() {
@@ -64,7 +73,7 @@ export default function UserManagement() {
   const [nombre, setNombre] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rol, setRol] = useState<'Administrador' | 'Operador'>('Operador');
+  const [rol, setRol] = useState<'Administrador' | 'Operador' | 'Consulta'>('Operador');
   const [puntoEntrega, setPuntoEntrega] = useState<string>('Santa Ana');
 
   // Estado para usuario en edición
@@ -72,7 +81,7 @@ export default function UserManagement() {
   const [editNombre, setEditNombre] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPassword, setEditPassword] = useState('');
-  const [editRol, setEditRol] = useState<'Administrador' | 'Operador'>('Operador');
+  const [editRol, setEditRol] = useState<'Administrador' | 'Operador' | 'Consulta'>('Operador');
   const [editPuntoEntrega, setEditPuntoEntrega] = useState<string>('Santa Ana');
 
   // Cargar Puntos de Entrega dinámicos desde el maestro
@@ -455,11 +464,12 @@ export default function UserManagement() {
                 <label className="block text-xs font-bold text-amber-900 uppercase mb-1">Rol de Acceso *</label>
                 <select
                   value={editRol}
-                  onChange={(e) => setEditRol(e.target.value as 'Administrador' | 'Operador')}
+                  onChange={(e) => setEditRol(e.target.value as 'Administrador' | 'Operador' | 'Consulta')}
                   className="w-full p-2.5 rounded-xl border border-amber-300 text-xs font-bold focus:ring-2 focus:ring-amber-700 focus:outline-none bg-white text-slate-800"
                 >
                   <option value="Operador">Operador (Registra Entregas)</option>
                   <option value="Administrador">Administrador (Control Total)</option>
+                  <option value="Consulta">Consulta (Solo Lectura Inventarios)</option>
                 </select>
               </div>
 
@@ -576,11 +586,12 @@ export default function UserManagement() {
               <label className="block text-xs font-bold text-cs-primary uppercase mb-1">Rol de Acceso *</label>
               <select
                 value={rol}
-                onChange={(e) => setRol(e.target.value as 'Administrador' | 'Operador')}
+                onChange={(e) => setRol(e.target.value as 'Administrador' | 'Operador' | 'Consulta')}
                 className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-slate-50 text-slate-800"
               >
                 <option value="Operador">Operador (Registra Entregas)</option>
                 <option value="Administrador">Administrador (Control Total)</option>
+                <option value="Consulta">Consulta (Solo Lectura Inventarios)</option>
               </select>
             </div>
 
@@ -650,6 +661,8 @@ export default function UserManagement() {
                       className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${
                         u.rol === 'Administrador'
                           ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : u.rol === 'Consulta'
+                          ? 'bg-sky-100 text-sky-800 border border-sky-300'
                           : 'bg-teal-100 text-teal-800 border border-teal-300'
                       }`}
                     >

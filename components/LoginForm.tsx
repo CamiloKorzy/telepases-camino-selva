@@ -46,6 +46,15 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
     punto_entrega: 'Santa Ana',
     activo: true,
   },
+  {
+    id: '5',
+    email: 'consulta@caminoselva.com',
+    nombre: 'Auditor / Consulta Inventario',
+    password_hash: 'consulta123',
+    rol: 'Consulta',
+    punto_entrega: 'Todos',
+    activo: true,
+  },
 ];
 
 export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
