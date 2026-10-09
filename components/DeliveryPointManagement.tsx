@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { PeajeStock } from '@/types/database';
 import { getMasterDeliveryPoints, saveMasterDeliveryPoint, deleteMasterDeliveryPoint } from '@/lib/deliveryPoints';
 import { MapPin, Plus, Save, AlertCircle, CheckCircle, RefreshCw, Edit2, ShieldAlert, Trash2 } from 'lucide-react';
+import ConfirmModal from '@/components/ConfirmModal';
 
 interface DeliveryPointManagementProps {
   onPointUpdated?: () => void;
@@ -99,15 +100,35 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
     setStockMinimo(100);
   };
 
-  const handleDelete = async (stationName: string) => {
-    if (!confirm(`¿Está seguro que desea eliminar el Punto de Entrega "${stationName}" del maestro?`)) {
-      return;
-    }
+  const [confirmModalState, setConfirmModalState] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    confirmText?: string;
+    type?: 'primary' | 'danger' | 'warning';
+    icon?: 'confirm' | 'danger' | 'warning' | 'truck' | 'trash';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    message: '',
+    onConfirm: () => {},
+  });
 
-    const updated = await deleteMasterDeliveryPoint(stationName);
-    setPoints(updated);
-    setMessage({ text: `Punto de Entrega "${stationName}" eliminado correctamente.`, type: 'success' });
-    if (onPointUpdated) onPointUpdated();
+  const handleDelete = (stationName: string) => {
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Eliminar Punto de Entrega',
+      message: `¿Está seguro que desea eliminar el Punto de Entrega "${stationName}" del maestro oficial?`,
+      confirmText: 'Sí, Eliminar Estación',
+      type: 'danger',
+      icon: 'trash',
+      onConfirm: async () => {
+        const updated = await deleteMasterDeliveryPoint(stationName);
+        setPoints(updated);
+        setMessage({ text: `Punto de Entrega "${stationName}" eliminado correctamente.`, type: 'success' });
+        if (onPointUpdated) onPointUpdated();
+      },
+    });
   };
 
   return (
@@ -303,6 +324,20 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModalState.isOpen}
+        title={confirmModalState.title}
+        message={confirmModalState.message}
+        confirmText={confirmModalState.confirmText}
+        type={confirmModalState.type}
+        icon={confirmModalState.icon}
+        onConfirm={() => {
+          confirmModalState.onConfirm();
+          setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+        }}
+        onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

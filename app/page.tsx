@@ -12,6 +12,7 @@ import DeliveryPointManagement from '@/components/DeliveryPointManagement';
 import TransferManagement from '@/components/TransferManagement';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck } from 'lucide-react';
+import ConfirmModal from '@/components/ConfirmModal';
 
 export default function AntigravityDashboard() {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -291,27 +292,47 @@ export default function AntigravityDashboard() {
     fetchData();
   };
 
-  const handleDeleteDelivery = async (item: TagDelivery) => {
-    if (!confirm(`¿Está seguro de que desea eliminar la entrega del TAG ${item.tag_serial} (Patente ${item.dominio})?`)) {
-      return;
-    }
+  const [confirmModalState, setConfirmModalState] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    confirmText?: string;
+    type?: 'primary' | 'danger' | 'warning';
+    icon?: 'confirm' | 'danger' | 'warning' | 'truck' | 'trash';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    message: '',
+    onConfirm: () => {},
+  });
 
-    try {
-      if (item.id) {
-        await supabase.from('tag_deliveries').delete().eq('id', item.id);
-      }
-    } catch {}
+  const handleDeleteDelivery = (item: TagDelivery) => {
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Eliminar Entrega de TAG',
+      message: `¿Está seguro de que desea eliminar el registro de entrega del TAG ${item.tag_serial} (Vehículo Dominio ${item.dominio})?`,
+      confirmText: 'Sí, Eliminar Registro',
+      type: 'danger',
+      icon: 'trash',
+      onConfirm: async () => {
+        try {
+          if (item.id) {
+            await supabase.from('tag_deliveries').delete().eq('id', item.id);
+          }
+        } catch {}
 
-    const stored = localStorage.getItem('telepase_local_tag_deliveries');
-    if (stored) {
-      try {
-        const localList: TagDelivery[] = JSON.parse(stored);
-        const updatedList = localList.filter((d) => d.id !== item.id && d.tag_serial !== item.tag_serial);
-        localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(updatedList));
-      } catch {}
-    }
+        const stored = localStorage.getItem('telepase_local_tag_deliveries');
+        if (stored) {
+          try {
+            const localList: TagDelivery[] = JSON.parse(stored);
+            const updatedList = localList.filter((d) => d.id !== item.id && d.tag_serial !== item.tag_serial);
+            localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(updatedList));
+          } catch {}
+        }
 
-    fetchData();
+        fetchData();
+      },
+    });
   };
 
   // Filtrado de búsquedas
@@ -869,6 +890,20 @@ export default function AntigravityDashboard() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmModalState.isOpen}
+        title={confirmModalState.title}
+        message={confirmModalState.message}
+        confirmText={confirmModalState.confirmText}
+        type={confirmModalState.type}
+        icon={confirmModalState.icon}
+        onConfirm={() => {
+          confirmModalState.onConfirm();
+          setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+        }}
+        onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

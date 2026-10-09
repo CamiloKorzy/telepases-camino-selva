@@ -7,6 +7,8 @@ import { Truck, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 import { validateTransferOut } from '@/lib/inventoryValidation';
 
+import ConfirmModal from '@/components/ConfirmModal';
+
 const LOCAL_TRANSFERS_KEY = 'telepase_local_tag_transfers';
 
 interface TransferManagementProps {
@@ -254,68 +256,91 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
     onTransferUpdated();
   };
 
-  const handleConfirmReception = async (t: TagTransfer) => {
-    if (!confirm(`¿Confirmar recepción de ${t.cantidad.toLocaleString('es-AR')} TAGs en ${t.destino}?`)) {
-      return;
-    }
+  const [confirmModalState, setConfirmModalState] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    confirmText?: string;
+    type?: 'primary' | 'danger' | 'warning';
+    icon?: 'confirm' | 'danger' | 'warning' | 'truck' | 'trash';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    message: '',
+    onConfirm: () => {},
+  });
 
-    const updatedPayload: TagTransfer = {
-      ...t,
-      estado: 'Recibido',
-      fecha_recepcion: new Date().toISOString(),
-      usuario_recepcion: currentUser.nombre || currentUser.email,
-    };
+  const handleConfirmReception = (t: TagTransfer) => {
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Confirmar Recepción de Inventario',
+      message: `¿Confirmar recepción de ${Number(t.cantidad).toLocaleString('es-AR')} TAGs en ${t.destino}?`,
+      confirmText: 'Aceptar Recepción',
+      type: 'primary',
+      icon: 'truck',
+      onConfirm: async () => {
+        const updatedPayload: TagTransfer = {
+          ...t,
+          estado: 'Recibido',
+          fecha_recepcion: new Date().toISOString(),
+          usuario_recepcion: currentUser.nombre || currentUser.email,
+        };
 
-    // Actualizar en Supabase
-    try {
-      if (t.id) {
-        await supabase.from('tag_transfers').update(updatedPayload).eq('id', t.id);
-      }
-    } catch {}
+        try {
+          if (t.id) {
+            await supabase.from('tag_transfers').update(updatedPayload).eq('id', t.id);
+          }
+        } catch {}
 
-    // Actualizar LocalStorage
-    const stored = localStorage.getItem(LOCAL_TRANSFERS_KEY);
-    if (stored) {
-      try {
-        const prev: TagTransfer[] = JSON.parse(stored);
-        const updated = prev.map((item) => (item.id === t.id ? updatedPayload : item));
-        localStorage.setItem(LOCAL_TRANSFERS_KEY, JSON.stringify(updated));
-      } catch {}
-    }
+        const stored = localStorage.getItem(LOCAL_TRANSFERS_KEY);
+        if (stored) {
+          try {
+            const prev: TagTransfer[] = JSON.parse(stored);
+            const updated = prev.map((item) => (item.id === t.id ? updatedPayload : item));
+            localStorage.setItem(LOCAL_TRANSFERS_KEY, JSON.stringify(updated));
+          } catch {}
+        }
 
-    // Actualizar estado local
-    setTransfers((prev) => prev.map((item) => (item.id === t.id ? updatedPayload : item)));
-    window.dispatchEvent(new Event('tag_transfers_updated'));
+        setTransfers((prev) => prev.map((item) => (item.id === t.id ? updatedPayload : item)));
+        window.dispatchEvent(new Event('tag_transfers_updated'));
 
-    setMessage({ type: 'success', text: `¡Recepción confirmada exitosamente en ${t.destino}!` });
-    onTransferUpdated();
+        setMessage({ type: 'success', text: `¡Recepción confirmada exitosamente en ${t.destino}!` });
+        onTransferUpdated();
+      },
+    });
   };
 
-  const handleCancelTransfer = async (t: TagTransfer) => {
-    if (!confirm(`¿Desea cancelar la transferencia de ${t.origen} a ${t.destino}?`)) {
-      return;
-    }
+  const handleCancelTransfer = (t: TagTransfer) => {
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Cancelar Transferencia',
+      message: `¿Desea cancelar la transferencia de ${t.origen} a ${t.destino}?`,
+      confirmText: 'Sí, Cancelar',
+      type: 'danger',
+      icon: 'trash',
+      onConfirm: async () => {
+        try {
+          if (t.id) {
+            await supabase.from('tag_transfers').delete().eq('id', t.id);
+          }
+        } catch {}
 
-    try {
-      if (t.id) {
-        await supabase.from('tag_transfers').delete().eq('id', t.id);
-      }
-    } catch {}
+        const stored = localStorage.getItem(LOCAL_TRANSFERS_KEY);
+        if (stored) {
+          try {
+            const prev: TagTransfer[] = JSON.parse(stored);
+            const updated = prev.filter((item) => item.id !== t.id);
+            localStorage.setItem(LOCAL_TRANSFERS_KEY, JSON.stringify(updated));
+          } catch {}
+        }
 
-    const stored = localStorage.getItem(LOCAL_TRANSFERS_KEY);
-    if (stored) {
-      try {
-        const prev: TagTransfer[] = JSON.parse(stored);
-        const updated = prev.filter((item) => item.id !== t.id);
-        localStorage.setItem(LOCAL_TRANSFERS_KEY, JSON.stringify(updated));
-      } catch {}
-    }
+        setTransfers((prev) => prev.filter((item) => item.id !== t.id));
+        window.dispatchEvent(new Event('tag_transfers_updated'));
 
-    setTransfers((prev) => prev.filter((item) => item.id !== t.id));
-    window.dispatchEvent(new Event('tag_transfers_updated'));
-
-    setMessage({ type: 'success', text: `Transferencia cancelada.` });
-    onTransferUpdated();
+        setMessage({ type: 'success', text: `Transferencia cancelada.` });
+        onTransferUpdated();
+      },
+    });
   };
 
   const handleResetForm = () => {
@@ -728,6 +753,20 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModalState.isOpen}
+        title={confirmModalState.title}
+        message={confirmModalState.message}
+        confirmText={confirmModalState.confirmText}
+        type={confirmModalState.type}
+        icon={confirmModalState.icon}
+        onConfirm={() => {
+          confirmModalState.onConfirm();
+          setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+        }}
+        onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

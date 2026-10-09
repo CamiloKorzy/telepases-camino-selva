@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { UserProfile, PeajeStock } from '@/types/database';
 import { UserPlus, Shield, UserCheck, UserX, AlertCircle, CheckCircle2, RefreshCw, Key, Info, Edit, X, Save, MapPin } from 'lucide-react';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
+import ConfirmModal from '@/components/ConfirmModal';
 
 const LOCAL_USERS_KEY = 'telepase_registered_user_profiles';
 
@@ -352,27 +353,47 @@ export default function UserManagement() {
     setSubmitting(false);
   };
 
-  const toggleUserStatus = async (user: UserProfile) => {
+  const [confirmModalState, setConfirmModalState] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    confirmText?: string;
+    type?: 'primary' | 'danger' | 'warning';
+    icon?: 'confirm' | 'danger' | 'warning' | 'truck' | 'trash';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const toggleUserStatus = (user: UserProfile) => {
     const nuevoEstado = !user.activo;
     const accionText = nuevoEstado ? 'activar' : 'desactivar';
 
-    if (!confirm(`¿Está seguro que desea ${accionText} el usuario de "${user.nombre}"?`)) {
-      return;
-    }
+    setConfirmModalState({
+      isOpen: true,
+      title: `${nuevoEstado ? 'Activar' : 'Desactivar'} Usuario`,
+      message: `¿Está seguro que desea ${accionText} el usuario de "${user.nombre}" (${user.email})?`,
+      confirmText: nuevoEstado ? 'Sí, Activar Usuario' : 'Sí, Desactivar Usuario',
+      type: nuevoEstado ? 'primary' : 'warning',
+      icon: nuevoEstado ? 'confirm' : 'warning',
+      onConfirm: async () => {
+        try {
+          await supabase
+            .from('user_profiles')
+            .update({ activo: nuevoEstado, updated_at: new Date().toISOString() })
+            .eq('email', user.email);
+        } catch {}
 
-    try {
-      await supabase
-        .from('user_profiles')
-        .update({ activo: nuevoEstado, updated_at: new Date().toISOString() })
-        .eq('email', user.email);
-    } catch {}
+        const updatedUsers = users.map((u) =>
+          u.email === user.email ? { ...u, activo: nuevoEstado } : u
+        );
 
-    const updatedUsers = users.map((u) =>
-      u.email === user.email ? { ...u, activo: nuevoEstado } : u
-    );
-
-    setUsers(updatedUsers);
-    localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updatedUsers));
+        setUsers(updatedUsers);
+        localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updatedUsers));
+      },
+    });
   };
 
   return (
@@ -693,6 +714,20 @@ export default function UserManagement() {
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModalState.isOpen}
+        title={confirmModalState.title}
+        message={confirmModalState.message}
+        confirmText={confirmModalState.confirmText}
+        type={confirmModalState.type}
+        icon={confirmModalState.icon}
+        onConfirm={() => {
+          confirmModalState.onConfirm();
+          setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+        }}
+        onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

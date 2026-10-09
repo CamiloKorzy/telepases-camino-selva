@@ -6,6 +6,7 @@ import { TagBatch, UserSession } from '@/types/database';
 import { Layers, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, Edit2, Trash2, X, Plus, Trash } from 'lucide-react';
 
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
+import ConfirmModal from '@/components/ConfirmModal';
 
 const LOCAL_BATCHES_KEY = 'telepase_local_tag_batches';
 
@@ -314,51 +315,65 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
     setRangeRows([{ id: '1', serialDesde: '', serialHasta: '', cantidad: '' }]);
   };
 
-  const handleDeleteBatch = async (b: TagBatch) => {
-    if (
-      !confirm(
-        `¿Está seguro de que desea eliminar la recepción del lote ${b.serial_desde} - ${b.serial_hasta} en ${b.estacion}?`
-      )
-    ) {
-      return;
-    }
+  const [confirmModalState, setConfirmModalState] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    confirmText?: string;
+    type?: 'primary' | 'danger' | 'warning';
+    icon?: 'confirm' | 'danger' | 'warning' | 'truck' | 'trash';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    message: '',
+    onConfirm: () => {},
+  });
 
-    try {
-      if (b.id) {
-        await supabase.from('tag_batches').delete().eq('id', b.id);
-      }
-    } catch {}
+  const handleDeleteBatch = (b: TagBatch) => {
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Eliminar Lote de TAGs',
+      message: `¿Está seguro de que desea eliminar la recepción del lote (${b.serial_desde} - ${b.serial_hasta}) en ${b.estacion}?`,
+      confirmText: 'Sí, Eliminar Lote',
+      type: 'danger',
+      icon: 'trash',
+      onConfirm: async () => {
+        try {
+          if (b.id) {
+            await supabase.from('tag_batches').delete().eq('id', b.id);
+          }
+        } catch {}
 
-    const stored = localStorage.getItem(LOCAL_BATCHES_KEY);
-    if (stored) {
-      try {
-        const prevBatches: TagBatch[] = JSON.parse(stored);
-        const updated = prevBatches.filter(
-          (item) =>
-            item.id !== b.id &&
-            !(item.serial_desde === b.serial_desde && item.estacion === b.estacion)
+        const stored = localStorage.getItem(LOCAL_BATCHES_KEY);
+        if (stored) {
+          try {
+            const prevBatches: TagBatch[] = JSON.parse(stored);
+            const updated = prevBatches.filter(
+              (item) =>
+                item.id !== b.id &&
+                !(item.serial_desde === b.serial_desde && item.estacion === b.estacion)
+            );
+            localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(updated));
+          } catch {}
+        }
+
+        setBatches((prev) =>
+          prev.filter(
+            (item) =>
+              item.id !== b.id &&
+              !(item.serial_desde === b.serial_desde && item.estacion === b.estacion)
+          )
         );
-        localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(updated));
-      } catch {}
-    }
 
-    // Actualizar grilla local de forma inmediata
-    setBatches((prev) =>
-      prev.filter(
-        (item) =>
-          item.id !== b.id &&
-          !(item.serial_desde === b.serial_desde && item.estacion === b.estacion)
-      )
-    );
+        window.dispatchEvent(new Event('tag_batches_updated'));
 
-    window.dispatchEvent(new Event('tag_batches_updated'));
-
-    setMessage({
-      type: 'success',
-      text: `Lote de ${b.estacion} (${b.serial_desde} - ${b.serial_hasta}) eliminado correctamente.`,
+        setMessage({
+          type: 'success',
+          text: `Lote de ${b.estacion} (${b.serial_desde} - ${b.serial_hasta}) eliminado correctamente.`,
+        });
+        onBatchCreated();
+      },
     });
-    fetchBatches();
-    onBatchCreated();
   };
 
   return (
@@ -681,6 +696,20 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
           </table>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModalState.isOpen}
+        title={confirmModalState.title}
+        message={confirmModalState.message}
+        confirmText={confirmModalState.confirmText}
+        type={confirmModalState.type}
+        icon={confirmModalState.icon}
+        onConfirm={() => {
+          confirmModalState.onConfirm();
+          setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
+        }}
+        onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
