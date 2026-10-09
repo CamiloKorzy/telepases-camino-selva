@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagBatch, UserSession } from '@/types/database';
-import { Layers, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Calendar, Receipt, Edit2, Trash2, X, Save } from 'lucide-react';
+import { Layers, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, Edit2, Trash2, X, Plus, Trash } from 'lucide-react';
 
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 
@@ -14,6 +14,13 @@ interface BatchManagementProps {
   onBatchCreated: () => void;
 }
 
+export interface RangeRow {
+  id: string;
+  serialDesde: string;
+  serialHasta: string;
+  cantidad: string;
+}
+
 export default function BatchManagement({ currentUser, onBatchCreated }: BatchManagementProps) {
   const [batches, setBatches] = useState<TagBatch[]>([]);
   const [loading, setLoading] = useState(true);
@@ -21,16 +28,18 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [editingBatch, setEditingBatch] = useState<TagBatch | null>(null);
 
-  // Formulario nuevo lote
+  // Formulario de Cabecera de Recepción / Remito
   const [fechaRecepcion, setFechaRecepcion] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
   const [estacion, setEstacion] = useState<string>('Santa Ana');
   const [numeroRemito, setNumeroRemito] = useState<string>('');
-  const [serialDesde, setSerialDesde] = useState<string>('');
-  const [serialHasta, setSerialHasta] = useState<string>('');
-  const [cantidadInput, setCantidadInput] = useState<string>('');
   const [observaciones, setObservaciones] = useState<string>('');
+
+  // Filas dinámicas de rangos de series
+  const [rangeRows, setRangeRows] = useState<RangeRow[]>([
+    { id: '1', serialDesde: '', serialHasta: '', cantidad: '' },
+  ]);
 
   const [deliveryPoints, setDeliveryPoints] = useState<string[]>([]);
 
@@ -52,18 +61,6 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
     return () => window.removeEventListener('delivery_points_updated', handleUpdated);
   }, []);
 
-  // Recalcular cantidad estimada automáticamente cuando cambian los seriales
-  useEffect(() => {
-    const numDesde = parseInt(serialDesde.replace(/\D/g, ''), 10);
-    const numHasta = parseInt(serialHasta.replace(/\D/g, ''), 10);
-
-    if (!isNaN(numDesde) && !isNaN(numHasta) && numHasta >= numDesde) {
-      // Si el serial inicial termina en 0000 o 00, se suele contar exacto o inclusive
-      const calc = numHasta - numDesde + 1;
-      setCantidadInput(String(calc));
-    }
-  }, [serialDesde, serialHasta]);
-
   const fetchBatches = async () => {
     setLoading(true);
     let remoteBatches: TagBatch[] = [];
@@ -75,7 +72,7 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (data) remoteBatches = data;
+      if (data && data.length > 0) remoteBatches = data;
     } catch {}
 
     const stored = localStorage.getItem(LOCAL_BATCHES_KEY);
@@ -88,60 +85,141 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
     // Combinar sin duplicados
     const combinedMap = new Map<string, TagBatch>();
     [...remoteBatches, ...localBatches].forEach((b) => {
-      const key = `${b.estacion}_${b.serial_desde}_${b.serial_hasta}`;
+      const key = b.id || `${b.estacion}_${b.serial_desde}_${b.serial_hasta}`;
       if (!combinedMap.has(key)) {
         combinedMap.set(key, b);
       }
     });
 
-    const combinedList = Array.from(combinedMap.values());
+    const combinedList = Array.from(combinedMap.values()).sort(
+      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    );
     setBatches(combinedList);
     setLoading(false);
   };
 
   useEffect(() => {
     fetchBatches();
+    const handleUpdated = () => fetchBatches();
+    window.addEventListener('tag_batches_updated', handleUpdated);
+    return () => window.removeEventListener('tag_batches_updated', handleUpdated);
   }, []);
+
+  // Manejo de cambio de valores en filas de rangos
+  const handleRangeRowChange = (id: string, field: keyof RangeRow, value: string) => {
+    setRangeRows((prevRows) =>
+      prevRows.map((row) => {
+        if (row.id !== id) return row;
+        const updatedRow = { ...row, [field]: value };
+
+        // Recalcular cantidad si cambian los seriales
+        if (field === 'serialDesde' || field === 'serialHasta') {
+          const sDesde = field === 'serialDesde' ? value : updatedRow.serialDesde;
+          const sHasta = field === 'serialHasta' ? value : updatedRow.serialHasta;
+
+          const numDesde = parseInt(sDesde.replace(/\D/g, ''), 10);
+          const numHasta = parseInt(sHasta.replace(/\D/g, ''), 10);
+
+          if (!isNaN(numDesde) && !isNaN(numHasta) && numHasta >= numDesde) {
+            // Regla oficial de planilla: Inicio Inclusivo - Fin Exclusivo (numHasta - numDesde)
+            updatedRow.cantidad = String(numHasta - numDesde);
+          }
+        }
+
+        return updatedRow;
+      })
+    );
+  };
+
+  // Agregar nueva fila de rango
+  const handleAddRangeRow = () => {
+    // Si la última fila tiene seriales, intentar autocompletar el siguiente Serial Desde
+    const lastRow = rangeRows[rangeRows.length - 1];
+    let nextSerialDesde = '';
+    if (lastRow && lastRow.serialHasta) {
+      nextSerialDesde = lastRow.serialHasta; // En regla fin exclusivo, la siguiente inicia donde termina la anterior
+    }
+
+    setRangeRows((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        serialDesde: nextSerialDesde,
+        serialHasta: '',
+        cantidad: '',
+      },
+    ]);
+  };
+
+  // Eliminar fila de rango
+  const handleRemoveRangeRow = (id: string) => {
+    if (rangeRows.length <= 1) return;
+    setRangeRows((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  // Calcular total de TAGs del remito actual en el formulario
+  const totalTagsInForm = rangeRows.reduce(
+    (acc, row) => acc + (parseInt(row.cantidad, 10) || 0),
+    0
+  );
 
   const handleSaveBatch = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setMessage(null);
 
-    const desdeClean = serialDesde.trim().toUpperCase();
-    const hastaClean = serialHasta.trim().toUpperCase();
-    const parsedCantidad = parseInt(cantidadInput, 10);
+    // Validar que todas las filas tengan datos válidos
+    const validPayloads: TagBatch[] = [];
+    const timestamp = new Date().toISOString();
 
-    if (!desdeClean || !hastaClean) {
-      setMessage({ type: 'error', text: 'Debe ingresar el número inicial (Desde) y final (Hasta) del lote.' });
-      setSubmitting(false);
-      return;
+    for (let i = 0; i < rangeRows.length; i++) {
+      const row = rangeRows[i];
+      const desdeClean = row.serialDesde.trim().toUpperCase();
+      const hastaClean = row.serialHasta.trim().toUpperCase();
+      const parsedCantidad = parseInt(row.cantidad, 10);
+
+      if (!desdeClean || !hastaClean) {
+        setMessage({
+          type: 'error',
+          text: `Fila ${i + 1}: Debe ingresar Serial Desde y Serial Hasta.`,
+        });
+        setSubmitting(false);
+        return;
+      }
+
+      if (isNaN(parsedCantidad) || parsedCantidad <= 0) {
+        setMessage({
+          type: 'error',
+          text: `Fila ${i + 1}: La cantidad debe ser un número mayor a 0.`,
+        });
+        setSubmitting(false);
+        return;
+      }
+
+      validPayloads.push({
+        id: editingBatch && i === 0 ? editingBatch.id : crypto.randomUUID(),
+        created_at: editingBatch && i === 0 ? editingBatch.created_at : timestamp,
+        fecha_recepcion: fechaRecepcion || timestamp.split('T')[0],
+        estacion,
+        serial_desde: desdeClean,
+        serial_hasta: hastaClean,
+        cantidad: parsedCantidad,
+        numero_remito: numeroRemito.trim(),
+        observaciones: observaciones.trim(),
+        usuario_registro: editingBatch
+          ? editingBatch.usuario_registro
+          : currentUser.nombre || currentUser.email,
+      });
     }
-
-    if (isNaN(parsedCantidad) || parsedCantidad <= 0) {
-      setMessage({ type: 'error', text: 'Por favor ingrese una cantidad de unidades válida.' });
-      setSubmitting(false);
-      return;
-    }
-
-    const batchPayload: TagBatch = {
-      id: editingBatch ? editingBatch.id : crypto.randomUUID(),
-      created_at: editingBatch ? editingBatch.created_at : new Date().toISOString(),
-      fecha_recepcion: fechaRecepcion || new Date().toISOString().split('T')[0],
-      estacion,
-      serial_desde: desdeClean,
-      serial_hasta: hastaClean,
-      cantidad: parsedCantidad,
-      numero_remito: numeroRemito.trim(),
-      observaciones: observaciones.trim(),
-      usuario_registro: editingBatch ? editingBatch.usuario_registro : (currentUser.nombre || currentUser.email),
-    };
 
     try {
       if (editingBatch && editingBatch.id) {
-        await supabase.from('tag_batches').update(batchPayload).eq('id', editingBatch.id);
+        await supabase
+          .from('tag_batches')
+          .update(validPayloads[0])
+          .eq('id', editingBatch.id);
       } else {
-        await supabase.from('tag_batches').insert([batchPayload]);
+        await supabase.from('tag_batches').insert(validPayloads);
       }
     } catch {}
 
@@ -152,20 +230,27 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
 
     if (editingBatch) {
       updatedBatches = prevBatches.map((b) =>
-        b.id === editingBatch.id || (b.serial_desde === editingBatch.serial_desde && b.estacion === editingBatch.estacion)
-          ? batchPayload
-          : b
+        b.id === editingBatch.id ? validPayloads[0] : b
       );
     } else {
-      updatedBatches = [batchPayload, ...prevBatches];
+      updatedBatches = [...validPayloads, ...prevBatches];
     }
     localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(updatedBatches));
+
+    // Actualizar grilla local de forma inmediata (0ms de retraso)
+    setBatches((prev) => {
+      const newIds = new Set(validPayloads.map((p) => p.id));
+      const filtered = prev.filter((item) => !newIds.has(item.id));
+      return [...validPayloads, ...filtered];
+    });
+
+    window.dispatchEvent(new Event('tag_batches_updated'));
 
     setMessage({
       type: 'success',
       text: editingBatch
-        ? `¡Lote (${desdeClean} al ${hastaClean}) de ${estacion} actualizado correctamente!`
-        : `¡Lote de ${parsedCantidad} TAGs (${desdeClean} al ${hastaClean}) registrado exitosamente para ${estacion}!`,
+        ? `¡Lote de ${estacion} actualizado correctamente!`
+        : `¡Remito ${numeroRemito ? `Nº ${numeroRemito}` : ''} con ${validPayloads.length} Rango(s) de Series (${totalTagsInForm.toLocaleString('es-AR')} TAGs total) registrado exitosamente para ${estacion}!`,
     });
 
     handleResetForm();
@@ -180,24 +265,31 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
     setFechaRecepcion(b.fecha_recepcion || new Date().toISOString().split('T')[0]);
     setEstacion(b.estacion);
     setNumeroRemito(b.numero_remito || '');
-    setSerialDesde(b.serial_desde);
-    setSerialHasta(b.serial_hasta);
-    setCantidadInput(String(b.cantidad));
     setObservaciones(b.observaciones || '');
+    setRangeRows([
+      {
+        id: b.id || '1',
+        serialDesde: b.serial_desde,
+        serialHasta: b.serial_hasta,
+        cantidad: String(b.cantidad),
+      },
+    ]);
     setMessage(null);
   };
 
   const handleResetForm = () => {
     setEditingBatch(null);
-    setSerialDesde('');
-    setSerialHasta('');
-    setCantidadInput('');
     setNumeroRemito('');
     setObservaciones('');
+    setRangeRows([{ id: '1', serialDesde: '', serialHasta: '', cantidad: '' }]);
   };
 
   const handleDeleteBatch = async (b: TagBatch) => {
-    if (!confirm(`¿Está seguro de que desea eliminar la recepción del lote ${b.serial_desde} - ${b.serial_hasta} en ${b.estacion}?`)) {
+    if (
+      !confirm(
+        `¿Está seguro de que desea eliminar la recepción del lote ${b.serial_desde} - ${b.serial_hasta} en ${b.estacion}?`
+      )
+    ) {
       return;
     }
 
@@ -212,26 +304,44 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
       try {
         const prevBatches: TagBatch[] = JSON.parse(stored);
         const updated = prevBatches.filter(
-          (item) => item.id !== b.id && !(item.serial_desde === b.serial_desde && item.estacion === b.estacion)
+          (item) =>
+            item.id !== b.id &&
+            !(item.serial_desde === b.serial_desde && item.estacion === b.estacion)
         );
         localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(updated));
       } catch {}
     }
 
-    setMessage({ type: 'success', text: `Lote de ${b.estacion} (${b.serial_desde} - ${b.serial_hasta}) eliminado correctamente.` });
+    // Actualizar grilla local de forma inmediata
+    setBatches((prev) =>
+      prev.filter(
+        (item) =>
+          item.id !== b.id &&
+          !(item.serial_desde === b.serial_desde && item.estacion === b.estacion)
+      )
+    );
+
+    window.dispatchEvent(new Event('tag_batches_updated'));
+
+    setMessage({
+      type: 'success',
+      text: `Lote de ${b.estacion} (${b.serial_desde} - ${b.serial_hasta}) eliminado correctamente.`,
+    });
     fetchBatches();
     onBatchCreated();
   };
 
   return (
     <div className="space-y-6">
-      {/* Formulario de Recepción y Alta de Lotes */}
+      {/* Formulario de Recepción y Alta de Lotes Múltiples */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
         <div className="bg-cs-dark text-white p-4 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <PlusCircle className="w-5 h-5 text-cs-accent" />
             <h3 className="font-bold text-base">
-              {editingBatch ? 'Modificar Recepción de Lote de TAGs' : 'Recepción y Alta de Lotes de TAGs'}
+              {editingBatch
+                ? 'Modificar Recepción de Lote de TAGs'
+                : 'Recepción y Alta de Remito (Múltiples Rangos de Series)'}
             </h3>
           </div>
           <div className="flex items-center space-x-2">
@@ -251,7 +361,7 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
           </div>
         </div>
 
-        <form onSubmit={handleSaveBatch} className="p-5 space-y-4">
+        <form onSubmit={handleSaveBatch} className="p-5 space-y-5">
           {message && (
             <div
               className={`p-3 rounded-xl flex items-center space-x-2 text-xs font-medium ${
@@ -269,32 +379,29 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {/* 1. Fecha de Recepción */}
+          {/* 1. Datos Generales del Remito */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
             <div>
               <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
                 1. Fecha Recepción *
               </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={fechaRecepcion}
-                  onChange={(e) => setFechaRecepcion(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-slate-50 text-slate-800"
-                  required
-                />
-              </div>
+              <input
+                type="date"
+                value={fechaRecepcion}
+                onChange={(e) => setFechaRecepcion(e.target.value)}
+                className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white text-slate-800"
+                required
+              />
             </div>
 
-            {/* 2. Punto de Entrega */}
             <div>
               <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
-                2. Punto de Entrega *
+                2. Punto de Entrega (Destino) *
               </label>
               <select
                 value={estacion}
                 onChange={(e) => setEstacion(e.target.value)}
-                className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-slate-50 text-slate-800"
+                className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white text-slate-800"
               >
                 {deliveryPoints.map((pt) => (
                   <option key={pt} value={pt}>
@@ -304,7 +411,6 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
               </select>
             </div>
 
-            {/* 3. Número de Remito */}
             <div>
               <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
                 3. Nº de Remito
@@ -315,68 +421,117 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
                   value={numeroRemito}
                   onChange={(e) => setNumeroRemito(e.target.value)}
                   placeholder="ej. R-0001-00849"
-                  className="w-full p-2.5 pr-8 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                  className="w-full p-2.5 pr-8 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white"
                 />
                 <Receipt className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5" />
               </div>
             </div>
+          </div>
 
-            {/* 4. Serial Desde */}
-            <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
-                4. Serial Desde *
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={serialDesde}
-                  onChange={(e) => setSerialDesde(e.target.value)}
-                  placeholder="ej. 63230000"
-                  className="w-full p-2.5 pr-8 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                  required
-                />
-                <Hash className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5" />
+          {/* 2. Renglones de Rangos de Series del Remito */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Hash className="w-4 h-4 text-cs-primary" />
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                  Rangos de Series del Remito (Regla: Inicio Inclusivo / Fin Exclusivo)
+                </h4>
               </div>
+              <span className="text-[11px] font-bold text-slate-500">
+                Fórmula: Cantidad = Termina - Inicia
+              </span>
             </div>
 
-            {/* 5. Serial Hasta */}
-            <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
-                5. Serial Hasta *
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={serialHasta}
-                  onChange={(e) => setSerialHasta(e.target.value)}
-                  placeholder="ej. 63231500"
-                  className="w-full p-2.5 pr-8 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                  required
-                />
-                <Hash className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5" />
-              </div>
-            </div>
+            <div className="space-y-2 border border-slate-200 p-3 rounded-xl bg-slate-50/50">
+              {rangeRows.map((row, idx) => (
+                <div
+                  key={row.id}
+                  className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-2xs"
+                >
+                  <div className="sm:col-span-1 text-[11px] font-extrabold text-slate-400 text-center">
+                    #{idx + 1}
+                  </div>
 
-            {/* 6. Cantidad de Unidades (EDITABLE) */}
-            <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
-                6. Cantidad Unidades *
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={cantidadInput}
-                onChange={(e) => setCantidadInput(e.target.value)}
-                placeholder="ej. 1500"
-                className="w-full p-2.5 rounded-xl border-2 border-cs-primary/60 font-mono font-bold text-cs-dark text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none bg-emerald-50/40"
-                required
-              />
+                  <div className="sm:col-span-4">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                      Inicia (Serial Desde)
+                    </label>
+                    <input
+                      type="text"
+                      value={row.serialDesde}
+                      onChange={(e) => handleRangeRowChange(row.id, 'serialDesde', e.target.value)}
+                      placeholder="ej. 63226500"
+                      className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div className="sm:col-span-4">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                      Termina (Serial Hasta)
+                    </label>
+                    <input
+                      type="text"
+                      value={row.serialHasta}
+                      onChange={(e) => handleRangeRowChange(row.id, 'serialHasta', e.target.value)}
+                      placeholder="ej. 63227000"
+                      className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] font-bold text-emerald-700 uppercase mb-0.5">
+                      Cantidad (u.)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={row.cantidad}
+                      onChange={(e) => handleRangeRowChange(row.id, 'cantidad', e.target.value)}
+                      placeholder="500"
+                      className="w-full p-2 rounded-lg border-2 border-emerald-400 font-mono font-bold text-emerald-900 text-xs bg-emerald-50/60 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div className="sm:col-span-1 flex items-center justify-center pt-3 sm:pt-0">
+                    {rangeRows.length > 1 && !editingBatch && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveRangeRow(row.id)}
+                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                        title="Eliminar este rango"
+                      >
+                        <Trash className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {!editingBatch && (
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={handleAddRangeRow}
+                    className="py-2 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs"
+                  >
+                    <Plus className="w-4 h-4 text-emerald-600" />
+                    <span>+ Agregar Otro Rango de Series al Remito</span>
+                  </button>
+
+                  <div className="text-xs font-bold text-slate-700 bg-white px-3 py-1.5 rounded-xl border border-slate-200">
+                    Total Remito: <span className="text-cs-primary text-sm font-extrabold">{totalTagsInForm.toLocaleString('es-AR')}</span> TAGs ({rangeRows.length} rangos)
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-              Observaciones del Lote (Opcional)
+              Observaciones del Remito (Opcional)
             </label>
             <div className="relative">
               <input
@@ -396,7 +551,11 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
             className="w-full py-3 bg-cs-primary hover:bg-cs-dark text-white font-bold text-xs rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 uppercase tracking-wider"
           >
             <PlusCircle className="w-4 h-4 text-cs-accent" />
-            <span>{submitting ? 'Habilitando Lote...' : '📥 REGISTRAR LOTE DE TAGS (ALTA DE INVENTARIO)'}</span>
+            <span>
+              {submitting
+                ? 'Habilitando Lote(s)...'
+                : `📥 REGISTRAR REMITO (${totalTagsInForm.toLocaleString('es-AR')} TAGs EN ${rangeRows.length} RANGO/S)`}
+            </span>
           </button>
         </form>
       </div>
@@ -406,7 +565,9 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Layers className="w-5 h-5 text-cs-primary" />
-            <h3 className="font-bold text-base text-slate-900">Lotes de TAGs Habilitados por Punto de Entrega</h3>
+            <h3 className="font-bold text-base text-slate-900">
+              Lotes de TAGs Habilitados por Punto de Entrega
+            </h3>
           </div>
           <button
             onClick={fetchBatches}
@@ -424,8 +585,8 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
                 <th className="p-3">Fecha Recepción</th>
                 <th className="p-3">Punto de Entrega</th>
                 <th className="p-3">Nº Remito</th>
-                <th className="p-3">Serial Desde</th>
-                <th className="p-3">Serial Hasta</th>
+                <th className="p-3">Inicia (Desde)</th>
+                <th className="p-3">Termina (Hasta)</th>
                 <th className="p-3">Unidades</th>
                 <th className="p-3">Registrado Por</th>
                 <th className="p-3">Observaciones</th>
@@ -443,10 +604,13 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
                 batches.map((b, idx) => (
                   <tr key={b.id || idx} className="hover:bg-slate-50 transition">
                     <td className="p-3 text-slate-700 font-mono text-[11px] whitespace-nowrap font-bold">
-                      {b.fecha_recepcion || (b.created_at ? new Date(b.created_at).toLocaleDateString('es-AR') : '-')}
+                      {b.fecha_recepcion ||
+                        (b.created_at ? new Date(b.created_at).toLocaleDateString('es-AR') : '-')}
                     </td>
                     <td className="p-3 font-bold text-slate-800 whitespace-nowrap">{b.estacion}</td>
-                    <td className="p-3 font-mono font-bold text-slate-900">{b.numero_remito || '-'}</td>
+                    <td className="p-3 font-mono font-bold text-slate-900">
+                      {b.numero_remito || '-'}
+                    </td>
                     <td className="p-3 font-mono font-bold text-cs-primary">{b.serial_desde}</td>
                     <td className="p-3 font-mono font-bold text-cs-primary">{b.serial_hasta}</td>
                     <td className="p-3 font-bold text-slate-900">
@@ -455,7 +619,9 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
                       </span>
                     </td>
                     <td className="p-3 text-slate-700 font-semibold">{b.usuario_registro}</td>
-                    <td className="p-3 text-slate-500 max-w-[180px] truncate">{b.observaciones || '-'}</td>
+                    <td className="p-3 text-slate-500 max-w-[180px] truncate">
+                      {b.observaciones || '-'}
+                    </td>
                     {currentUser.rol === 'Administrador' && (
                       <td className="p-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center space-x-1.5">

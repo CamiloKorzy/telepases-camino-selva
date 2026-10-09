@@ -108,7 +108,13 @@ export default function AntigravityDashboard() {
     const stationNamesList = masterPoints.map((p) => p.estacion);
     setAvailableStations(stationNamesList);
 
-    // Lotes cargados localmente
+    // 4. Obtener Lotes/Recepciones de Supabase y localStorage
+    let remoteBatches: TagBatch[] = [];
+    try {
+      const { data: batchesData } = await supabase.from('tag_batches').select('*');
+      if (batchesData && batchesData.length > 0) remoteBatches = batchesData;
+    } catch {}
+
     const storedBatches = localStorage.getItem('telepase_local_tag_batches');
     if (storedBatches) {
       try {
@@ -116,11 +122,20 @@ export default function AntigravityDashboard() {
       } catch {}
     }
 
+    const batchMap = new Map<string, TagBatch>();
+    [...remoteBatches, ...localBatches].forEach((b) => {
+      const key = b.id || `${b.estacion}_${b.serial_desde}_${b.serial_hasta}`;
+      if (!batchMap.has(key)) {
+        batchMap.set(key, b);
+      }
+    });
+    const allBatches = Array.from(batchMap.values());
+
     const finalStocks: PeajeStock[] = masterPoints.map((pt) => {
       const st = pt.estacion;
       
       // Stock recibido proviene EXCLUSIVAMENTE de recepciones/lotes dados de alta
-      const lotesEstacion = localBatches.filter((b) => b.estacion.toLowerCase() === st.toLowerCase());
+      const lotesEstacion = allBatches.filter((b) => b.estacion.toLowerCase() === st.toLowerCase());
       const totalRecibidoLotes = lotesEstacion.reduce((acc, b) => acc + (Number(b.cantidad) || 0), 0);
 
       // Entregados en este Punto de Entrega
@@ -148,7 +163,11 @@ export default function AntigravityDashboard() {
 
     const handleUpdated = () => fetchData();
     window.addEventListener('delivery_points_updated', handleUpdated);
-    return () => window.removeEventListener('delivery_points_updated', handleUpdated);
+    window.addEventListener('tag_batches_updated', handleUpdated);
+    return () => {
+      window.removeEventListener('delivery_points_updated', handleUpdated);
+      window.removeEventListener('tag_batches_updated', handleUpdated);
+    };
   }, [userSession]);
 
   const handleLogout = () => {
