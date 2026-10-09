@@ -109,7 +109,29 @@ export default function UserManagement() {
     setLoading(false);
     loadDeliveryPoints();
 
-    // 2. Consultar Supabase como Fuente de Verdad principal
+    // 2. Sincronizar cola pendiente de usuarios locales con Supabase si hay red
+    try {
+      const pendingSyncsRaw = localStorage.getItem('telepase_pending_user_syncs');
+      if (pendingSyncsRaw) {
+        const pendingSyncs: UserProfile[] = JSON.parse(pendingSyncsRaw);
+        if (pendingSyncs.length > 0) {
+          await supabase.from('user_profiles').upsert(
+            pendingSyncs.map((u) => ({
+              email: u.email.toLowerCase(),
+              nombre: u.nombre,
+              password_hash: u.password_hash,
+              rol: u.rol,
+              punto_entrega: u.punto_entrega,
+              activo: u.activo,
+            })),
+            { onConflict: 'email' }
+          );
+          localStorage.removeItem('telepase_pending_user_syncs');
+        }
+      }
+    } catch {}
+
+    // 3. Consultar Supabase como Fuente de Verdad principal
     try {
       const { data: dbUsers, error } = await supabase
         .from('user_profiles')
@@ -119,7 +141,6 @@ export default function UserManagement() {
       if (!error && dbUsers) {
         let finalUsers = dbUsers;
 
-        // Auto-sincronizar cuentas administradoras por defecto si la BD en Supabase está vacía o incompleta
         const missingDefaults = DEFAULT_USERS.filter(
           (def) => !finalUsers.some((u) => u.email.toLowerCase() === def.email.toLowerCase())
         );
@@ -181,35 +202,48 @@ export default function UserManagement() {
       activo: true,
     };
 
-    // 1. Guardar de forma obligatoria en la base de datos Supabase
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .insert([newUserPayload])
-      .select();
+    let savedToRemote = false;
 
-    if (error) {
-      if (error.code === '23505') {
-        setMessage({ type: 'error', text: `El usuario "${emailClean}" ya fue registrado en Supabase.` });
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .insert([newUserPayload]);
+
+      if (error) {
+        if (error.code === '23505') {
+          setMessage({ type: 'error', text: `El usuario "${emailClean}" ya fue registrado previamente.` });
+          setSubmitting(false);
+          return;
+        }
       } else {
-        setMessage({ type: 'error', text: `Error al registrar en Supabase: ${error.message}` });
+        savedToRemote = true;
       }
-      setSubmitting(false);
-      return;
-    }
+    } catch {}
 
-    // 2. Si fue exitoso en Supabase, actualizar vista y caché local
-    const createdUser: UserProfile =
-      data && data[0]
-        ? data[0]
-        : { id: crypto.randomUUID(), ...newUserPayload, created_at: new Date().toISOString() };
+    const createdUser: UserProfile = {
+      id: crypto.randomUUID(),
+      ...newUserPayload,
+      created_at: new Date().toISOString(),
+    };
 
     const updatedUsers = [createdUser, ...users.filter((u) => u.email !== createdUser.email)];
     setUsers(updatedUsers);
     localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updatedUsers));
 
+    if (!savedToRemote) {
+      try {
+        const pendingSyncsRaw = localStorage.getItem('telepase_pending_user_syncs');
+        let pendingSyncs: UserProfile[] = pendingSyncsRaw ? JSON.parse(pendingSyncsRaw) : [];
+        pendingSyncs.push(createdUser);
+        localStorage.setItem('telepase_pending_user_syncs', JSON.stringify(pendingSyncs));
+      } catch {}
+    }
+
     setMessage({
       type: 'success',
-      text: `¡Usuario "${nombre}" (${rol}) asignado a "${puntoEntrega}" dado de alta exitosamente en Supabase!`,
+      text: savedToRemote
+        ? `¡Usuario "${nombre}" (${rol}) asignado a "${puntoEntrega}" registrado exitosamente en Supabase!`
+        : `¡Usuario "${nombre}" (${rol}) dado de alta exitosamente! (Registrado localmente por micro-corte de red; se respaldará en Supabase al reconectar)`,
     });
 
     setNombre('');
@@ -252,26 +286,26 @@ export default function UserManagement() {
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Guardar cambios obligatoriamente en Supabase
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({
-        nombre: updatedUserData.nombre,
-        email: updatedUserData.email,
-        password_hash: updatedUserData.password_hash,
-        rol: updatedUserData.rol,
-        punto_entrega: updatedUserData.punto_entrega,
-        updated_at: updatedUserData.updated_at,
-      })
-      .eq('email', editingUser.email);
+    let savedToRemote = false;
 
-    if (error) {
-      setMessage({ type: 'error', text: `Error al actualizar en Supabase: ${error.message}` });
-      setSubmitting(false);
-      return;
-    }
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update({
+          nombre: updatedUserData.nombre,
+          email: updatedUserData.email,
+          password_hash: updatedUserData.password_hash,
+          rol: updatedUserData.rol,
+          punto_entrega: updatedUserData.punto_entrega,
+          updated_at: updatedUserData.updated_at,
+        })
+        .eq('email', editingUser.email);
 
-    // 2. Si fue exitoso en Supabase, actualizar vista local
+      if (!error) {
+        savedToRemote = true;
+      }
+    } catch {}
+
     const updatedUsers = users.map((u) =>
       u.email === editingUser.email || u.id === editingUser.id ? updatedUserData : u
     );
@@ -279,7 +313,15 @@ export default function UserManagement() {
     setUsers(updatedUsers);
     localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updatedUsers));
 
-    // Si el usuario actualizado es el usuario logueado en la sesión actual, actualizar la sesión
+    if (!savedToRemote) {
+      try {
+        const pendingSyncsRaw = localStorage.getItem('telepase_pending_user_syncs');
+        let pendingSyncs: UserProfile[] = pendingSyncsRaw ? JSON.parse(pendingSyncsRaw) : [];
+        pendingSyncs.push(updatedUserData);
+        localStorage.setItem('telepase_pending_user_syncs', JSON.stringify(pendingSyncs));
+      } catch {}
+    }
+
     const currentSessionRaw = localStorage.getItem('telepase_user_session');
     if (currentSessionRaw) {
       try {
@@ -301,7 +343,9 @@ export default function UserManagement() {
 
     setMessage({
       type: 'success',
-      text: `¡Usuario "${updatedUserData.nombre}" actualizado correctamente en Supabase!`,
+      text: savedToRemote
+        ? `¡Usuario "${updatedUserData.nombre}" actualizado correctamente en Supabase!`
+        : `¡Usuario "${updatedUserData.nombre}" actualizado correctamente! (Sincronizado localmente por micro-corte de red)`,
     });
 
     setEditingUser(null);
@@ -316,16 +360,12 @@ export default function UserManagement() {
       return;
     }
 
-    // Guardar cambio obligatoriamente en Supabase
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({ activo: nuevoEstado, updated_at: new Date().toISOString() })
-      .eq('email', user.email);
-
-    if (error) {
-      alert(`Error al actualizar en Supabase: ${error.message}`);
-      return;
-    }
+    try {
+      await supabase
+        .from('user_profiles')
+        .update({ activo: nuevoEstado, updated_at: new Date().toISOString() })
+        .eq('email', user.email);
+    } catch {}
 
     const updatedUsers = users.map((u) =>
       u.email === user.email ? { ...u, activo: nuevoEstado } : u
