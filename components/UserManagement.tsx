@@ -89,41 +89,58 @@ export default function UserManagement() {
   }, []);
 
   const fetchUsers = async () => {
-    setLoading(true);
-    setIsOfflineMode(false);
-    await loadDeliveryPoints();
+    // 1. Cargar almacenamiento local de inmediato (0ms delay)
+    let localUsers: UserProfile[] = [];
+    const stored = localStorage.getItem(LOCAL_USERS_KEY);
+    if (stored) {
+      try {
+        localUsers = JSON.parse(stored);
+      } catch {
+        localUsers = DEFAULT_USERS;
+      }
+    } else {
+      localUsers = DEFAULT_USERS;
+    }
 
+    if (!localUsers.some((u) => u.email === 'camilo.k@ceeenriquez.com')) {
+      localUsers.unshift(DEFAULT_USERS[0]);
+    }
+
+    setUsers(localUsers);
+    setLoading(false);
+
+    loadDeliveryPoints();
+
+    // 2. Consultar Supabase en segundo plano con timeout rápido (1.5s)
     try {
-      const { data, error } = await supabase
+      const fetchPromise = supabase
         .from('user_profiles')
         .select('*')
         .order('created_at', { ascending: false });
+      const timeoutPromise = new Promise<{ data: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null }), 1500)
+      );
 
-      if (!error && data && data.length > 0) {
-        setUsers(data);
-        localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(data));
-      } else {
-        throw new Error(error?.message || 'Usando almacenamiento local.');
-      }
-    } catch (err: any) {
-      setIsOfflineMode(true);
-      const stored = localStorage.getItem(LOCAL_USERS_KEY);
-      if (stored) {
-        try {
-          const parsed: UserProfile[] = JSON.parse(stored);
-          if (!parsed.some((u) => u.email === 'camilo.k@ceeenriquez.com')) {
-            parsed.unshift(DEFAULT_USERS[0]);
+      const res = (await Promise.race([fetchPromise, timeoutPromise])) as any;
+
+      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+        setIsOfflineMode(false);
+        const userMap = new Map<string, UserProfile>();
+        res.data.forEach((u: UserProfile) => userMap.set(u.email.toLowerCase(), u));
+        localUsers.forEach((u: UserProfile) => {
+          if (!userMap.has(u.email.toLowerCase())) {
+            userMap.set(u.email.toLowerCase(), u);
           }
-          setUsers(parsed);
-        } catch {
-          setUsers(DEFAULT_USERS);
-        }
+        });
+
+        const mergedList = Array.from(userMap.values());
+        setUsers(mergedList);
+        localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(mergedList));
       } else {
-        setUsers(DEFAULT_USERS);
-        localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(DEFAULT_USERS));
+        setIsOfflineMode(true);
       }
-    } finally {
-      setLoading(false);
+    } catch {
+      setIsOfflineMode(true);
     }
   };
 
