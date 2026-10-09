@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { TagTransfer, UserSession } from '@/types/database';
 import { Truck, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, ArrowRight, CheckCircle, XCircle, Trash2, Plus, Trash } from 'lucide-react';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
+import { validateTransferOut } from '@/lib/inventoryValidation';
 
 const LOCAL_TRANSFERS_KEY = 'telepase_local_tag_transfers';
 
@@ -200,6 +201,14 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
 
       if (isNaN(parsedCantidad) || parsedCantidad <= 0) {
         setMessage({ type: 'error', text: `Fila #${i + 1}: La cantidad debe ser mayor a 0.` });
+        setSubmitting(false);
+        return;
+      }
+
+      // Control de Inventarios: Validar que el rango enviado pertenezca al origen y esté disponible
+      const valRes = validateTransferOut(origen, desdeClean, hastaClean, parsedCantidad);
+      if (!valRes.valid) {
+        setMessage({ type: 'error', text: `Fila #${i + 1}: ${valRes.error}` });
         setSubmitting(false);
         return;
       }

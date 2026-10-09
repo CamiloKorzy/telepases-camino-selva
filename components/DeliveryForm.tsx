@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagDelivery, UserSession, TagBatch, PeajeStock } from '@/types/database';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
+import { validateTagDelivery } from '@/lib/inventoryValidation';
 import { CheckCircle2, AlertCircle, Save, Car, User } from 'lucide-react';
 
 interface DeliveryFormProps {
@@ -111,23 +112,13 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       return;
     }
 
-    // 1. Validar que el TAG pertenezca a un lote habilitado para este Punto de Entrega
-    const habilitado = isTagInEnabledBatch(tagClean, formData.estacion);
-    if (!habilitado) {
+    // Control Estricto de Inventarios: Validar que el TAG pertenezca a la estación (lote/transferencia) y esté disponible
+    const valRes = validateTagDelivery(formData.estacion, tagClean);
+    if (!valRes.valid) {
       setMessage({
         type: 'error',
-        text: `El TAG "${tagClean}" NO pertenece a ningún lote dado de alta para el Punto de Entrega ${formData.estacion}. Verifique el número o registre el lote en Configuración.`,
+        text: valRes.error || `El TAG "${tagClean}" no está disponible en ${formData.estacion}.`,
       });
-      setLoading(false);
-      return;
-    }
-
-    // 2. Validar si ya fue entregado previamente en local
-    const storedDeliveries = localStorage.getItem('telepase_local_tag_deliveries');
-    const existingList: TagDelivery[] = storedDeliveries ? JSON.parse(storedDeliveries) : [];
-    const yaEntregado = existingList.some((d) => d.tag_serial.toUpperCase() === tagClean);
-    if (yaEntregado) {
-      setMessage({ type: 'error', text: `El número de TAG "${tagClean}" ya fue entregado previamente.` });
       setLoading(false);
       return;
     }
@@ -158,7 +149,9 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     }
 
     // Guardar en almacenamiento local para asegurar que aparezca DE INMEDIATO en la lista
-    const updatedDeliveries = [payload, ...existingList];
+    const storedDeliveries = localStorage.getItem('telepase_local_tag_deliveries');
+    const prevDeliveries: TagDelivery[] = storedDeliveries ? JSON.parse(storedDeliveries) : [];
+    const updatedDeliveries = [payload, ...prevDeliveries];
     localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(updatedDeliveries));
 
     setMessage({ type: 'success', text: `¡TAG ${tagClean} registrado exitosamente para ${formData.dominio}!` });
