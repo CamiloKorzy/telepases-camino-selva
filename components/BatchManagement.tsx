@@ -645,7 +645,7 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
                     <td className="p-3 font-mono font-bold text-cs-primary">{b.serial_hasta}</td>
                     <td className="p-3 font-bold text-slate-900">
                       <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full font-mono text-[11px]">
-                        {b.cantidad} u.
+                        {Number(b.cantidad).toLocaleString('es-AR')} u.
                       </span>
                     </td>
                     <td className="p-3 text-slate-700 font-semibold">{b.usuario_registro}</td>

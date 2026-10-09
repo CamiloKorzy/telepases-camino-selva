@@ -55,3 +55,20 @@ export interface TagBatch {
   observaciones?: string;
   usuario_registro: string;
 }
+
+export interface TagTransfer {
+  id?: string;
+  created_at?: string;
+  fecha_envio?: string;
+  origen: string;
+  destino: string;
+  serial_desde: string;
+  serial_hasta: string;
+  cantidad: number;
+  estado: 'En Tránsito' | 'Recibido' | 'Cancelado';
+  numero_remito_transferencia?: string;
+  usuario_envio: string;
+  fecha_recepcion?: string;
+  usuario_recepcion?: string;
+  observaciones?: string;
+}

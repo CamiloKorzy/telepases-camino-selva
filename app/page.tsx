@@ -3,14 +3,15 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
-import { TagDelivery, PeajeStock, UserSession, TagBatch } from '@/types/database';
+import { TagDelivery, PeajeStock, UserSession, TagBatch, TagTransfer } from '@/types/database';
 import DeliveryForm from '@/components/DeliveryForm';
 import LoginForm from '@/components/LoginForm';
 import UserManagement from '@/components/UserManagement';
 import BatchManagement from '@/components/BatchManagement';
 import DeliveryPointManagement from '@/components/DeliveryPointManagement';
+import TransferManagement from '@/components/TransferManagement';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save } from 'lucide-react';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck } from 'lucide-react';
 
 export default function AntigravityDashboard() {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -20,7 +21,7 @@ export default function AntigravityDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<string>('Todas');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'settings_batches' | 'settings_points' | 'settings_users'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users'>('dashboard');
 
   // Estado para edición de entrega por Administrador
   const [editingDelivery, setEditingDelivery] = useState<TagDelivery | null>(null);
@@ -146,20 +147,62 @@ export default function AntigravityDashboard() {
     });
     const allBatches = Array.from(batchMap.values());
 
+    // 4. Obtener Movimientos de Transferencias (Envíos y Recepciones)
+    let remoteTransfers: TagTransfer[] = [];
+    let localTransfers: TagTransfer[] = [];
+    const storedTransfers = localStorage.getItem('telepase_local_tag_transfers');
+    if (storedTransfers) {
+      try {
+        localTransfers = JSON.parse(storedTransfers);
+      } catch {}
+    }
+
+    try {
+      const fetchTransfers = supabase.from('tag_transfers').select('*');
+      const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+      const res = await Promise.race([fetchTransfers, timeoutPromise]);
+      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+        remoteTransfers = res.data;
+      }
+    } catch {}
+
+    const transferMap = new Map<string, TagTransfer>();
+    [...remoteTransfers, ...localTransfers].forEach((t) => {
+      const key = t.id || `${t.origen}_${t.destino}_${t.serial_desde}_${t.serial_hasta}`;
+      if (!transferMap.has(key)) {
+        transferMap.set(key, t);
+      }
+    });
+    const allTransfers = Array.from(transferMap.values());
+
     const finalStocks: PeajeStock[] = masterPoints.map((pt) => {
       const st = pt.estacion;
       
-      // Stock recibido proviene EXCLUSIVAMENTE de recepciones/lotes dados de alta
+      // Stock recibido por Alta de Lotes
       const lotesEstacion = allBatches.filter((b) => b.estacion.toLowerCase() === st.toLowerCase());
       const totalRecibidoLotes = lotesEstacion.reduce((acc, b) => acc + (Number(b.cantidad) || 0), 0);
 
-      // Entregados en este Punto de Entrega
-      const entregadosEstacion = allDeliveries.filter((d) => d.estacion.toLowerCase() === st.toLowerCase()).length;
+      // Stock recibido por Transferencias (confirmadas como 'Recibido')
+      const transfRecibidas = allTransfers.filter((t) => t.destino.toLowerCase() === st.toLowerCase() && t.estado === 'Recibido');
+      const totalRecibidoTransf = transfRecibidas.reduce((acc, t) => acc + (Number(t.cantidad) || 0), 0);
+
+      // Stock total acreditado a la estación
+      const totalStockRecibido = totalRecibidoLotes + totalRecibidoTransf;
+
+      // Stock enviado a otros Puntos de Entrega (En Tránsito o Recibido)
+      const transfEnviadas = allTransfers.filter((t) => t.origen.toLowerCase() === st.toLowerCase() && t.estado !== 'Cancelado');
+      const totalEnviadoTransf = transfEnviadas.reduce((acc, t) => acc + (Number(t.cantidad) || 0), 0);
+
+      // Entregados en vía a vehículos
+      const entregadosVia = allDeliveries.filter((d) => d.estacion.toLowerCase() === st.toLowerCase()).length;
+
+      // Total salidas de la estación
+      const totalStockSalidas = entregadosVia + totalEnviadoTransf;
 
       return {
         estacion: st,
-        stock_recibido: totalRecibidoLotes,
-        stock_entregado: entregadosEstacion,
+        stock_recibido: totalStockRecibido,
+        stock_entregado: totalStockSalidas,
         stock_minimo_alerta: pt.stock_minimo_alerta || 100,
       };
     });
@@ -179,9 +222,11 @@ export default function AntigravityDashboard() {
     const handleUpdated = () => fetchData();
     window.addEventListener('delivery_points_updated', handleUpdated);
     window.addEventListener('tag_batches_updated', handleUpdated);
+    window.addEventListener('tag_transfers_updated', handleUpdated);
     return () => {
       window.removeEventListener('delivery_points_updated', handleUpdated);
       window.removeEventListener('tag_batches_updated', handleUpdated);
+      window.removeEventListener('tag_transfers_updated', handleUpdated);
     };
   }, [userSession]);
 
@@ -368,6 +413,18 @@ export default function AntigravityDashboard() {
                 <span>Entregas</span>
               </button>
 
+              <button
+                onClick={() => setActiveTab('transfers')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                  activeTab === 'transfers'
+                    ? 'bg-cs-primary text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Truck className="w-3.5 h-3.5" />
+                <span>Movimientos</span>
+              </button>
+
               {isAdmin && (
                 <>
                   <button
@@ -455,7 +512,12 @@ export default function AntigravityDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 mt-6">
-        {/* VISTA 1: ALTA Y RECEPCIÓN DE LOTES DE TAGS (SOLO ADMIN) */}
+        {/* VISTA 1: MOVIMIENTOS Y TRANSFERENCIAS DE INVENTARIO */}
+        {activeTab === 'transfers' && (
+          <TransferManagement currentUser={userSession} onTransferUpdated={fetchData} />
+        )}
+
+        {/* VISTA 2: ALTA Y RECEPCIÓN DE LOTES DE TAGS (SOLO ADMIN) */}
         {activeTab === 'settings_batches' && isAdmin && (
           <BatchManagement currentUser={userSession} onBatchCreated={fetchData} />
         )}
@@ -514,11 +576,11 @@ export default function AntigravityDashboard() {
                         )}
                       </div>
                       <div className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
-                        {disponible} <span className="text-xs font-normal text-slate-500">disp.</span>
+                        {disponible.toLocaleString('es-AR')} <span className="text-xs font-normal text-slate-500">disp.</span>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-1.5 flex items-center justify-between gap-1">
-                        <span>Entregados: <b className="text-slate-800">{s.stock_entregado}</b></span>
-                        <span>Recibidos: <b className="text-slate-700">{s.stock_recibido}</b></span>
+                        <span>Entregados: <b className="text-slate-800">{s.stock_entregado.toLocaleString('es-AR')}</b></span>
+                        <span>Recibidos: <b className="text-slate-700">{s.stock_recibido.toLocaleString('es-AR')}</b></span>
                       </div>
                     </div>
                   );

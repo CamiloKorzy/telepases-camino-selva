@@ -81,23 +81,45 @@ CREATE TABLE IF NOT EXISTS public.tag_batches (
     usuario_registro VARCHAR(100) NOT NULL
 );
 
--- 5. ÍNDICES DE ALTO RENDIMIENTO PARA CONSULTAS
+-- 5. TABLA DE MOVIMIENTOS Y TRANSFERENCIAS ENTRE DEPOSITOS / PUNTOS DE ENTREGA
+CREATE TABLE IF NOT EXISTS public.tag_transfers (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc'::text, now()) NOT NULL,
+    fecha_envio DATE DEFAULT CURRENT_DATE NOT NULL,
+    origen VARCHAR(100) NOT NULL,
+    destino VARCHAR(100) NOT NULL,
+    serial_desde VARCHAR(20) NOT NULL,
+    serial_hasta VARCHAR(20) NOT NULL,
+    cantidad INT NOT NULL,
+    estado VARCHAR(30) DEFAULT 'En Tránsito' NOT NULL CHECK (estado IN ('En Tránsito', 'Recibido', 'Cancelado')),
+    numero_remito_transferencia VARCHAR(100),
+    usuario_envio VARCHAR(100) NOT NULL,
+    fecha_recepcion TIMESTAMPTZ,
+    usuario_recepcion VARCHAR(100),
+    observaciones TEXT
+);
+
+-- 6. ÍNDICES DE ALTO RENDIMIENTO PARA CONSULTAS
 CREATE INDEX IF NOT EXISTS idx_tag_deliveries_dominio ON public.tag_deliveries(dominio);
 CREATE INDEX IF NOT EXISTS idx_tag_deliveries_tag_serial ON public.tag_deliveries(tag_serial);
 CREATE INDEX IF NOT EXISTS idx_tag_deliveries_estacion ON public.tag_deliveries(estacion);
 CREATE INDEX IF NOT EXISTS idx_tag_deliveries_created_at ON public.tag_deliveries(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_tag_batches_estacion ON public.tag_batches(estacion);
+CREATE INDEX IF NOT EXISTS idx_tag_transfers_origen ON public.tag_transfers(origen);
+CREATE INDEX IF NOT EXISTS idx_tag_transfers_destino ON public.tag_transfers(destino);
 
--- 6. HABILITAR ROW LEVEL SECURITY (RLS) Y POLÍTICAS DE ACCESO TOTAL (SELECT, INSERT, UPDATE, DELETE)
+-- 7. HABILITAR ROW LEVEL SECURITY (RLS) Y POLÍTICAS DE ACCESO TOTAL (SELECT, INSERT, UPDATE, DELETE)
 ALTER TABLE public.tag_deliveries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.peaje_stock ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tag_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tag_transfers ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Permitir todo en entregas" ON public.tag_deliveries FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Permitir todo en stock" ON public.peaje_stock FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Permitir todo en usuarios" ON public.user_profiles FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Permitir todo en lotes" ON public.tag_batches FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Permitir todo en transferencias" ON public.tag_transfers FOR ALL USING (true) WITH CHECK (true);
 
 -- 7. TRIGGER AUTOMÁTICO DE ACTUALIZACIÓN DE STOCK AL REGISTRAR ENTREGA
 CREATE OR REPLACE FUNCTION update_stock_on_delivery()
