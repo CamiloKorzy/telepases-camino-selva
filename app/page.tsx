@@ -199,11 +199,21 @@ export default function AntigravityDashboard() {
       // Total salidas de la estación
       const totalStockSalidas = entregadosVia + totalEnviadoTransf;
 
+      // Pendientes de Recepción (Transferencias enviadas a esta estación que siguen en tránsito)
+      const transfPendientesRecepcion = allTransfers.filter(
+        (t) => t.destino.toLowerCase() === st.toLowerCase() && t.estado === 'En Tránsito'
+      );
+      const totalPendientesRecepcion = transfPendientesRecepcion.reduce(
+        (acc, t) => acc + (Number(t.cantidad) || 0),
+        0
+      );
+
       return {
         estacion: st,
         stock_recibido: totalStockRecibido,
         stock_entregado: totalStockSalidas,
         stock_minimo_alerta: pt.stock_minimo_alerta || 100,
+        pendientes_recepcion: totalPendientesRecepcion,
       };
     });
 
@@ -581,6 +591,24 @@ export default function AntigravityDashboard() {
                       <div className="text-[11px] text-slate-500 mt-1.5 flex items-center justify-between gap-1">
                         <span>Entregados: <b className="text-slate-800">{s.stock_entregado.toLocaleString('es-AR')}</b></span>
                         <span>Recibidos: <b className="text-slate-700">{s.stock_recibido.toLocaleString('es-AR')}</b></span>
+                      </div>
+
+                      <div
+                        onClick={() => setActiveTab('transfers')}
+                        className={`mt-2 pt-1.5 border-t flex items-center justify-between px-2 py-1 rounded-lg text-[10px] font-bold cursor-pointer transition ${
+                          (s.pendientes_recepcion || 0) > 0
+                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 border shadow-2xs'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200/60 border'
+                        }`}
+                        title="Ver Transferencias y Pendientes de Recepción"
+                      >
+                        <span className="flex items-center space-x-1">
+                          <Truck className={`w-3 h-3 ${(s.pendientes_recepcion || 0) > 0 ? 'text-amber-600' : 'text-slate-400'}`} />
+                          <span>Pend. Recepción:</span>
+                        </span>
+                        <b className={(s.pendientes_recepcion || 0) > 0 ? 'text-amber-800 font-black' : 'text-slate-700'}>
+                          {(s.pendientes_recepcion || 0).toLocaleString('es-AR')}
+                        </b>
                       </div>
                     </div>
                   );

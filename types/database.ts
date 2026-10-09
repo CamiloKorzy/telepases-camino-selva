@@ -18,6 +18,7 @@ export interface PeajeStock {
   stock_recibido: number;
   stock_entregado: number;
   stock_minimo_alerta: number;
+  pendientes_recepcion?: number;
   updated_at?: string;
 }
 
