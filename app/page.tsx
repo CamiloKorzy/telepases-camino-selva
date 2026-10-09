@@ -70,18 +70,7 @@ export default function AntigravityDashboard() {
     let localDeliveries: TagDelivery[] = [];
     let localBatches: TagBatch[] = [];
 
-    // 1. Obtener entregas de Supabase
-    try {
-      const { data: deliveriesData } = await supabase
-        .from('tag_deliveries')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(300);
-
-      if (deliveriesData) remoteDeliveries = deliveriesData;
-    } catch {}
-
-    // 2. Obtener entregas guardadas en localStorage
+    // 1. Obtener entregas guardadas en localStorage inmediatamente
     const storedLocalDeliveries = localStorage.getItem('telepase_local_tag_deliveries');
     if (storedLocalDeliveries) {
       try {
@@ -89,7 +78,17 @@ export default function AntigravityDashboard() {
       } catch {}
     }
 
-    // Combinar entregas remotas y locales sin duplicados por ID o TAG serial
+    // Consultar Supabase en segundo plano con timeout rápido (1.5s)
+    try {
+      const fetchDeliveries = supabase.from('tag_deliveries').select('*').order('created_at', { ascending: false }).limit(300);
+      const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+      const res = await Promise.race([fetchDeliveries, timeoutPromise]);
+      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+        remoteDeliveries = res.data;
+      }
+    } catch {}
+
+    // Combinar entregas remotas y locales sin duplicados
     const deliveryMap = new Map<string, TagDelivery>();
     [...localDeliveries, ...remoteDeliveries].forEach((d) => {
       const key = d.id || d.tag_serial;
@@ -103,24 +102,40 @@ export default function AntigravityDashboard() {
     );
     setDeliveries(allDeliveries);
 
-    // 3. Obtener Maestro Oficial de Puntos de Entrega
+    // 2. Obtener Maestro Oficial de Puntos de Entrega (Respuesta Inmediata)
     const masterPoints = await getMasterDeliveryPoints();
     const stationNamesList = masterPoints.map((p) => p.estacion);
     setAvailableStations(stationNamesList);
 
-    // 4. Obtener Lotes/Recepciones de Supabase y localStorage
-    let remoteBatches: TagBatch[] = [];
-    try {
-      const { data: batchesData } = await supabase.from('tag_batches').select('*');
-      if (batchesData && batchesData.length > 0) remoteBatches = batchesData;
-    } catch {}
-
+    // 3. Obtener Lotes/Recepciones de localStorage y Supabase con timeout
     const storedBatches = localStorage.getItem('telepase_local_tag_batches');
     if (storedBatches) {
       try {
         localBatches = JSON.parse(storedBatches);
+        // Auto-corregir cantidad de lote de 501 -> 500
+        let updated = false;
+        localBatches = localBatches.map((b) => {
+          if (b.serial_desde === '63226500' && b.serial_hasta === '63227000' && b.cantidad === 501) {
+            updated = true;
+            return { ...b, cantidad: 500 };
+          }
+          return b;
+        });
+        if (updated) {
+          localStorage.setItem('telepase_local_tag_batches', JSON.stringify(localBatches));
+        }
       } catch {}
     }
+
+    let remoteBatches: TagBatch[] = [];
+    try {
+      const fetchBatches = supabase.from('tag_batches').select('*');
+      const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+      const res = await Promise.race([fetchBatches, timeoutPromise]);
+      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+        remoteBatches = res.data;
+      }
+    } catch {}
 
     const batchMap = new Map<string, TagBatch>();
     [...remoteBatches, ...localBatches].forEach((b) => {

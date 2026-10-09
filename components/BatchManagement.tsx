@@ -62,25 +62,49 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
   }, []);
 
   const fetchBatches = async () => {
-    setLoading(true);
     let remoteBatches: TagBatch[] = [];
     let localBatches: TagBatch[] = [];
 
-    try {
-      const { data } = await supabase
-        .from('tag_batches')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (data && data.length > 0) remoteBatches = data;
-    } catch {}
-
+    // 1. Leer inmediatamente desde LocalStorage sin esperar la red
     const stored = localStorage.getItem(LOCAL_BATCHES_KEY);
     if (stored) {
       try {
         localBatches = JSON.parse(stored);
+        // Auto-corregir cantidad de lote inicial registrado previamente con 501 -> 500
+        let updated = false;
+        localBatches = localBatches.map((b) => {
+          if (b.serial_desde === '63226500' && b.serial_hasta === '63227000' && b.cantidad === 501) {
+            updated = true;
+            return { ...b, cantidad: 500 };
+          }
+          return b;
+        });
+        if (updated) {
+          localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(localBatches));
+        }
       } catch {}
     }
+
+    if (localBatches.length > 0) {
+      setBatches(localBatches);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+
+    // 2. Consultar Supabase en segundo plano con timeout rápido (1.5s)
+    try {
+      const fetchPromise = supabase
+        .from('tag_batches')
+        .select('*')
+        .order('created_at', { ascending: false });
+      const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+        remoteBatches = res.data;
+      }
+    } catch {}
 
     // Combinar sin duplicados
     const combinedMap = new Map<string, TagBatch>();
@@ -94,6 +118,7 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
     const combinedList = Array.from(combinedMap.values()).sort(
       (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
     );
+
     setBatches(combinedList);
     setLoading(false);
   };
