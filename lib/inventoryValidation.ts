@@ -87,13 +87,22 @@ function isSubRangeContained(subDesde: string, subHasta: string, desde: string, 
 /**
  * Validar si un TAG individual está disponible en una estación para entrega en vía
  */
-export function validateTagDelivery(estacion: string, tagSerial: string): ValidationResult {
+/**
+ * Validar si un TAG individual está disponible en una estación para entrega en vía (Sincrónico)
+ */
+export function validateTagDelivery(
+  estacion: string,
+  tagSerial: string,
+  customBatches?: TagBatch[],
+  customTransfers?: TagTransfer[],
+  customDeliveries?: TagDelivery[]
+): ValidationResult {
   const serialClean = tagSerial.trim().toUpperCase();
   const stClean = estacion.trim().toLowerCase();
 
-  const allBatches = getAllBatches();
-  const allTransfers = getAllTransfers();
-  const allDeliveries = getAllDeliveries();
+  const allBatches = customBatches || getAllBatches();
+  const allTransfers = customTransfers || getAllTransfers();
+  const allDeliveries = customDeliveries || getAllDeliveries();
 
   // 1. Verificar si ya fue entregado previamente en cualquier estación
   const yaEntregado = allDeliveries.find(
@@ -102,7 +111,7 @@ export function validateTagDelivery(estacion: string, tagSerial: string): Valida
   if (yaEntregado) {
     return {
       valid: false,
-      error: `El TAG "${serialClean}" ya fue entregado previamente en ${yaEntregado.estacion} (Dominio: ${yaEntregado.dominio}).`,
+      error: `El TAG "${serialClean}" ya fue entregado previamente en la estación "${yaEntregado.estacion}" (Vehículo Dominio: ${yaEntregado.dominio}).`,
     };
   }
 
@@ -111,30 +120,96 @@ export function validateTagDelivery(estacion: string, tagSerial: string): Valida
     (b) => b.estacion.trim().toLowerCase() === stClean && isSerialInRange(serialClean, b.serial_desde, b.serial_hasta)
   );
 
-  // 3. Verificar si el TAG fue recibido por una transferencia confirmada a esta estación
+  // 3. Verificar si el TAG fue recibido por una transferencia confirmada ("Recibido") a esta estación
   const perteneceTransfRecibida = allTransfers.some(
     (t) => t.destino.trim().toLowerCase() === stClean && t.estado === 'Recibido' && isSerialInRange(serialClean, t.serial_desde, t.serial_hasta)
   );
 
+  // 4. Verificar si el TAG pertenece a una transferencia enviada a esta estación que aún está PENDIENTE DE RECEPCIÓN ("En Tránsito")
+  const transfEnTransito = allTransfers.find(
+    (t) => t.destino.trim().toLowerCase() === stClean && t.estado === 'En Tránsito' && isSerialInRange(serialClean, t.serial_desde, t.serial_hasta)
+  );
+
   if (!perteneLoteEstacion && !perteneceTransfRecibida) {
+    if (transfEnTransito) {
+      return {
+        valid: false,
+        error: `El TAG "${serialClean}" proviene de una transferencia enviada desde "${transfEnTransito.origen}" pero figura PENDIENTE DE RECEPCIÓN en ${estacion}. Debe confirmar la recepción en la pestaña "Movimientos" antes de entregarlo.`,
+      };
+    }
+
     return {
       valid: false,
-      error: `El TAG "${serialClean}" no figura en el inventario activo de ${estacion} (no tiene Alta de Lote ni Recepción de Transferencia registrada en esta estación).`,
+      error: `El TAG "${serialClean}" NO corresponde a ningún lote dado de alta ni a ninguna transferencia recepcionada en la estación "${estacion}". Por favor verifique el número ingresado.`,
     };
   }
 
-  // 4. Verificar si el TAG fue transferido fuera de esta estación hacia otro punto
+  // 5. Verificar si el TAG fue transferido fuera de esta estación hacia otro punto
   const transferidoFuera = allTransfers.find(
     (t) => t.origen.trim().toLowerCase() === stClean && t.estado !== 'Cancelado' && isSerialInRange(serialClean, t.serial_desde, t.serial_hasta)
   );
   if (transferidoFuera) {
     return {
       valid: false,
-      error: `El TAG "${serialClean}" fue transferido desde ${estacion} hacia ${transferidoFuera.destino} (${transferidoFuera.estado}). No está disponible en ${estacion}.`,
+      error: `El TAG "${serialClean}" fue transferido desde "${estacion}" hacia "${transferidoFuera.destino}" (Estado: ${transferidoFuera.estado}). Ya no se encuentra disponible en ${estacion}.`,
     };
   }
 
   return { valid: true };
+}
+
+/**
+ * Validar si un TAG individual está disponible consultando Supabase + LocalStorage en tiempo real
+ */
+export async function validateTagDeliveryAsync(estacion: string, tagSerial: string): Promise<ValidationResult> {
+  let allBatches: TagBatch[] = getAllBatches();
+  let allTransfers: TagTransfer[] = getAllTransfers();
+  let allDeliveries: TagDelivery[] = getAllDeliveries();
+
+  try {
+    const fetchBatches = supabase.from('tag_batches').select('*');
+    const fetchTransfers = supabase.from('tag_transfers').select('*');
+    const fetchDeliveries = supabase.from('tag_deliveries').select('*');
+    const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+
+    const [bRes, tRes, dRes] = await Promise.all([
+      Promise.race([fetchBatches, timeoutPromise]),
+      Promise.race([fetchTransfers, timeoutPromise]),
+      Promise.race([fetchDeliveries, timeoutPromise]),
+    ]) as any[];
+
+    if (bRes && bRes.data && bRes.data.length > 0) {
+      const bMap = new Map<string, TagBatch>();
+      [...bRes.data, ...allBatches].forEach((b) => {
+        const k = b.id || `${b.estacion}_${b.serial_desde}_${b.serial_hasta}`;
+        if (!bMap.has(k)) bMap.set(k, b);
+      });
+      allBatches = Array.from(bMap.values());
+      localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(allBatches));
+    }
+
+    if (tRes && tRes.data && tRes.data.length > 0) {
+      const tMap = new Map<string, TagTransfer>();
+      [...tRes.data, ...allTransfers].forEach((t) => {
+        const k = t.id || `${t.origen}_${t.destino}_${t.serial_desde}_${t.serial_hasta}`;
+        if (!tMap.has(k)) tMap.set(k, t);
+      });
+      allTransfers = Array.from(tMap.values());
+      localStorage.setItem(LOCAL_TRANSFERS_KEY, JSON.stringify(allTransfers));
+    }
+
+    if (dRes && dRes.data && dRes.data.length > 0) {
+      const dMap = new Map<string, TagDelivery>();
+      [...dRes.data, ...allDeliveries].forEach((d) => {
+        const k = d.id || `${d.tag_serial}`;
+        if (!dMap.has(k)) dMap.set(k, d);
+      });
+      allDeliveries = Array.from(dMap.values());
+      localStorage.setItem(LOCAL_DELIVERIES_KEY, JSON.stringify(allDeliveries));
+    }
+  } catch {}
+
+  return validateTagDelivery(estacion, tagSerial, allBatches, allTransfers, allDeliveries);
 }
 
 /**

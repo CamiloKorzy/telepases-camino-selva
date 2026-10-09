@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagDelivery, UserSession, TagBatch, PeajeStock } from '@/types/database';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
-import { validateTagDelivery } from '@/lib/inventoryValidation';
+import { validateTagDelivery, validateTagDeliveryAsync } from '@/lib/inventoryValidation';
 import { CheckCircle2, AlertCircle, Save, Car, User } from 'lucide-react';
 
 interface DeliveryFormProps {
@@ -113,7 +113,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     }
 
     // Control Estricto de Inventarios: Validar que el TAG pertenezca a la estación (lote/transferencia) y esté disponible
-    const valRes = validateTagDelivery(formData.estacion, tagClean);
+    const valRes = await validateTagDeliveryAsync(formData.estacion, tagClean);
     if (!valRes.valid) {
       setMessage({
         type: 'error',
