@@ -48,9 +48,15 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
       const names = masterList.map((p) => p.estacion);
       setDeliveryPoints(names);
       if (names.length > 0) {
-        setOrigen(names[0]);
-        if (names.length > 1) {
-          setDestino(names[1]);
+        if (currentUser.punto_entrega && currentUser.punto_entrega !== 'Todos') {
+          setOrigen(currentUser.punto_entrega);
+          const otherTarget = names.find((n) => n.toLowerCase() !== currentUser.punto_entrega?.toLowerCase());
+          if (otherTarget) setDestino(otherTarget);
+        } else {
+          setOrigen(names[0]);
+          if (names.length > 1) {
+            setDestino(names[1]);
+          }
         }
       }
     };
