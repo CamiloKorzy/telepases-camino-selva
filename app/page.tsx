@@ -465,7 +465,7 @@ export default function AntigravityDashboard() {
                 <span>No hay Puntos de Entrega registrados. Ingrese a <b>Puntos de Entrega</b> en la barra superior para registrar sus estaciones.</span>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-flow-col md:auto-cols-fr gap-3.5">
                 {stocks.map((s) => {
                   const disponible = s.stock_recibido - s.stock_entregado;
                   const bajoStock = disponible <= s.stock_minimo_alerta;
@@ -474,7 +474,7 @@ export default function AntigravityDashboard() {
                   return (
                     <div
                       key={s.estacion}
-                      className={`p-4 rounded-2xl shadow-sm border transition relative ${
+                      className={`p-3.5 rounded-2xl shadow-sm border transition relative ${
                         isMyPoint
                           ? 'bg-emerald-50/50 border-cs-primary ring-2 ring-cs-primary/30'
                           : 'bg-white border-slate-200/80 hover:border-cs-primary/40'
@@ -485,18 +485,25 @@ export default function AntigravityDashboard() {
                           Mi Punto de Entrega
                         </span>
                       )}
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] font-bold text-cs-primary uppercase tracking-wide truncate max-w-[130px]">{s.estacion}</span>
+                      <div className="flex items-center justify-between mb-1.5 gap-1">
+                        <span
+                          className="text-[11px] font-bold text-cs-primary uppercase tracking-wide truncate"
+                          title={s.estacion}
+                        >
+                          {s.estacion}
+                        </span>
                         {bajoStock ? (
                           <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0" />
                         ) : (
                           <ShieldCheck className="w-4 h-4 text-cs-primary flex-shrink-0" />
                         )}
                       </div>
-                      <div className="text-2xl font-black text-slate-900">{disponible} <span className="text-xs font-normal text-slate-500">disp.</span></div>
-                      <div className="text-xs text-slate-500 mt-1 flex justify-between">
+                      <div className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
+                        {disponible} <span className="text-xs font-normal text-slate-500">disp.</span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 mt-1.5 flex items-center justify-between gap-1">
                         <span>Entregados: <b className="text-slate-800">{s.stock_entregado}</b></span>
-                        <span>Recibidos: {s.stock_recibido}</span>
+                        <span>Recibidos: <b className="text-slate-700">{s.stock_recibido}</b></span>
                       </div>
                     </div>
                   );
