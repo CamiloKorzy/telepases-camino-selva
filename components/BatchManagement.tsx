@@ -146,8 +146,13 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
           const numHasta = parseInt(sHasta.replace(/\D/g, ''), 10);
 
           if (!isNaN(numDesde) && !isNaN(numHasta) && numHasta >= numDesde) {
-            // Regla oficial de planilla: Inicio Inclusivo - Fin Exclusivo (numHasta - numDesde)
-            updatedRow.cantidad = String(numHasta - numDesde);
+            const diff = numHasta - numDesde;
+            // Si el serial hasta termina en '9' (ej. 63229999, 63231499) o diff+1 es múltiplo redondo, es conteo físico inclusivo (diff + 1)
+            if (sHasta.trim().endsWith('9') || (diff + 1) % 100 === 0 || (diff + 1) % 50 === 0) {
+              updatedRow.cantidad = String(diff + 1);
+            } else {
+              updatedRow.cantidad = String(diff);
+            }
           }
         }
 
@@ -459,11 +464,11 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
               <div className="flex items-center space-x-2">
                 <Hash className="w-4 h-4 text-cs-primary" />
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                  Rangos de Series del Remito (Regla: Inicio Inclusivo / Fin Exclusivo)
+                  Rangos de Series del Remito (Cálculo Automático de Unidades)
                 </h4>
               </div>
-              <span className="text-[11px] font-bold text-slate-500">
-                Fórmula: Cantidad = Termina - Inicia
+              <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                Soporta etiquetas físicas (...999) o cotas de remito (...000)
               </span>
             </div>
 
