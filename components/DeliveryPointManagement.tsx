@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { PeajeStock } from '@/types/database';
-import { getMasterDeliveryPoints, saveMasterDeliveryPoint } from '@/lib/deliveryPoints';
-import { MapPin, Plus, Save, AlertCircle, CheckCircle, RefreshCw, Edit2, ShieldAlert } from 'lucide-react';
+import { getMasterDeliveryPoints, saveMasterDeliveryPoint, deleteMasterDeliveryPoint } from '@/lib/deliveryPoints';
+import { MapPin, Plus, Save, AlertCircle, CheckCircle, RefreshCw, Edit2, ShieldAlert, Trash2 } from 'lucide-react';
 
 interface DeliveryPointManagementProps {
   onPointUpdated?: () => void;
@@ -17,7 +17,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
 
   // Form State
   const [nombre, setNombre] = useState<string>('');
-  const [stockRecibido, setStockRecibido] = useState<number>(1000);
+  const [stockRecibido, setStockRecibido] = useState<number>(0);
   const [stockMinimo, setStockMinimo] = useState<number>(100);
   const [editingStation, setEditingStation] = useState<string | null>(null);
 
@@ -76,7 +76,7 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
 
     // Reset Form
     setNombre('');
-    setStockRecibido(1000);
+    setStockRecibido(0);
     setStockMinimo(100);
     setEditingStation(null);
     setSubmitting(false);
@@ -95,8 +95,19 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
   const handleCancelEdit = () => {
     setEditingStation(null);
     setNombre('');
-    setStockRecibido(1000);
+    setStockRecibido(0);
     setStockMinimo(100);
+  };
+
+  const handleDelete = async (stationName: string) => {
+    if (!confirm(`¿Está seguro que desea eliminar el Punto de Entrega "${stationName}" del maestro?`)) {
+      return;
+    }
+
+    const updated = await deleteMasterDeliveryPoint(stationName);
+    setPoints(updated);
+    setMessage({ text: `Punto de Entrega "${stationName}" eliminado correctamente.`, type: 'success' });
+    if (onPointUpdated) onPointUpdated();
   };
 
   return (
@@ -264,13 +275,25 @@ export default function DeliveryPointManagement({ onPointUpdated }: DeliveryPoin
                         </span>
                       </td>
                       <td className="p-3 text-center">
-                        <button
-                          onClick={() => handleEdit(p)}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition inline-flex items-center space-x-1"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                          <span>Editar</span>
-                        </button>
+                        <div className="flex items-center justify-center space-x-2">
+                          <button
+                            onClick={() => handleEdit(p)}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition inline-flex items-center space-x-1"
+                            title="Editar Punto de Entrega"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>Editar</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(p.estacion)}
+                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-lg transition inline-flex items-center space-x-1"
+                            title="Eliminar Punto de Entrega"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Eliminar</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

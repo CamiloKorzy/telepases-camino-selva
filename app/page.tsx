@@ -10,7 +10,7 @@ import UserManagement from '@/components/UserManagement';
 import BatchManagement from '@/components/BatchManagement';
 import DeliveryPointManagement from '@/components/DeliveryPointManagement';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin } from 'lucide-react';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save } from 'lucide-react';
 
 export default function AntigravityDashboard() {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -22,8 +22,17 @@ export default function AntigravityDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'settings_batches' | 'settings_points' | 'settings_users'>('dashboard');
 
-  // Cargar sesión al iniciar
-  useEffect(() => {
+  // Estado para edición de entrega por Administrador
+  const [editingDelivery, setEditingDelivery] = useState<TagDelivery | null>(null);
+  const [editEstacion, setEditEstacion] = useState('');
+  const [editDominio, setEditDominio] = useState('');
+  const [editTagSerial, setEditTagSerial] = useState('');
+  const [editDniCuit, setEditDniCuit] = useState('');
+  const [editNombreReceptor, setEditNombreReceptor] = useState('');
+  const [editObservaciones, setEditObservaciones] = useState('');
+
+  // Cargar sesión al iniciar y escuchar actualizaciones
+  const syncSession = () => {
     const stored = localStorage.getItem('telepase_user_session');
     if (stored) {
       try {
@@ -36,11 +45,23 @@ export default function AntigravityDashboard() {
           setUserSession(session);
         } else {
           localStorage.removeItem('telepase_user_session');
+          setUserSession(null);
         }
       } catch {
         localStorage.removeItem('telepase_user_session');
+        setUserSession(null);
       }
+    } else {
+      setUserSession(null);
     }
+  };
+
+  useEffect(() => {
+    syncSession();
+
+    const handleSessionUpdated = () => syncSession();
+    window.addEventListener('user_session_updated', handleSessionUpdated);
+    return () => window.removeEventListener('user_session_updated', handleSessionUpdated);
   }, []);
 
   const fetchData = async () => {
@@ -97,20 +118,19 @@ export default function AntigravityDashboard() {
 
     const finalStocks: PeajeStock[] = masterPoints.map((pt) => {
       const st = pt.estacion;
-      const baseRecibido = pt.stock_recibido;
       
-      // Sumar recibido de lotes
-      const lotesEstacion = localBatches.filter((b) => b.estacion === st);
-      const extraRecibido = lotesEstacion.reduce((acc, b) => acc + (b.cantidad || 0), 0);
+      // Stock recibido proviene EXCLUSIVAMENTE de recepciones/lotes dados de alta
+      const lotesEstacion = localBatches.filter((b) => b.estacion.toLowerCase() === st.toLowerCase());
+      const totalRecibidoLotes = lotesEstacion.reduce((acc, b) => acc + (Number(b.cantidad) || 0), 0);
 
       // Entregados en este Punto de Entrega
-      const entregadosEstacion = allDeliveries.filter((d) => d.estacion === st).length;
+      const entregadosEstacion = allDeliveries.filter((d) => d.estacion.toLowerCase() === st.toLowerCase()).length;
 
       return {
         estacion: st,
-        stock_recibido: baseRecibido + extraRecibido,
+        stock_recibido: totalRecibidoLotes,
         stock_entregado: entregadosEstacion,
-        stock_minimo_alerta: pt.stock_minimo_alerta,
+        stock_minimo_alerta: pt.stock_minimo_alerta || 100,
       };
     });
 
@@ -137,12 +157,72 @@ export default function AntigravityDashboard() {
     setUserSession(null);
   };
 
-  const toggleRole = () => {
-    if (!userSession) return;
-    const nuevoRol = userSession.rol === 'Administrador' ? 'Operador' : 'Administrador';
-    const nuevaSesion: UserSession = { ...userSession, rol: nuevoRol };
-    setUserSession(nuevaSesion);
-    localStorage.setItem('telepase_user_session', JSON.stringify(nuevaSesion));
+  const handleStartEditDelivery = (item: TagDelivery) => {
+    setEditingDelivery(item);
+    setEditEstacion(item.estacion);
+    setEditDominio(item.dominio);
+    setEditTagSerial(item.tag_serial);
+    setEditDniCuit(item.dni_cuit);
+    setEditNombreReceptor(item.nombre_apellido || '');
+    setEditObservaciones(item.observaciones || '');
+  };
+
+  const handleUpdateDelivery = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDelivery) return;
+
+    const updatedPayload: TagDelivery = {
+      ...editingDelivery,
+      estacion: editEstacion,
+      dominio: editDominio.toUpperCase().replace(/\s/g, ''),
+      tag_serial: editTagSerial.trim().toUpperCase(),
+      dni_cuit: editDniCuit.trim(),
+      nombre_apellido: editNombreReceptor.trim(),
+      observaciones: editObservaciones.trim(),
+    };
+
+    try {
+      if (editingDelivery.id) {
+        await supabase.from('tag_deliveries').update(updatedPayload).eq('id', editingDelivery.id);
+      }
+    } catch {}
+
+    const stored = localStorage.getItem('telepase_local_tag_deliveries');
+    if (stored) {
+      try {
+        const localList: TagDelivery[] = JSON.parse(stored);
+        const updatedList = localList.map((d) =>
+          d.id === editingDelivery.id || d.tag_serial === editingDelivery.tag_serial ? updatedPayload : d
+        );
+        localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(updatedList));
+      } catch {}
+    }
+
+    setEditingDelivery(null);
+    fetchData();
+  };
+
+  const handleDeleteDelivery = async (item: TagDelivery) => {
+    if (!confirm(`¿Está seguro de que desea eliminar la entrega del TAG ${item.tag_serial} (Patente ${item.dominio})?`)) {
+      return;
+    }
+
+    try {
+      if (item.id) {
+        await supabase.from('tag_deliveries').delete().eq('id', item.id);
+      }
+    } catch {}
+
+    const stored = localStorage.getItem('telepase_local_tag_deliveries');
+    if (stored) {
+      try {
+        const localList: TagDelivery[] = JSON.parse(stored);
+        const updatedList = localList.filter((d) => d.id !== item.id && d.tag_serial !== item.tag_serial);
+        localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(updatedList));
+      } catch {}
+    }
+
+    fetchData();
   };
 
   // Filtrado de búsquedas
@@ -295,11 +375,10 @@ export default function AntigravityDashboard() {
               )}
             </div>
 
-            {/* Badge Usuario + Selector de Rol */}
-            <button
-              onClick={toggleRole}
-              className="flex items-center space-x-2 bg-slate-50 hover:bg-slate-100 text-slate-800 text-xs px-3 py-1.5 rounded-xl border border-slate-200 transition text-left"
-              title="Haz clic para cambiar el rol (Administrador / Operador)"
+            {/* Badge Usuario (Display de Rol y Punto de Entrega Asignado) */}
+            <div
+              className="flex items-center space-x-2 bg-slate-50 text-slate-800 text-xs px-3 py-1.5 rounded-xl border border-slate-200 text-left"
+              title={`Usuario: ${userSession.nombre} | Rol: ${userSession.rol} | Punto de Entrega: ${userSession.punto_entrega || 'Todos'}`}
             >
               <User className="w-4 h-4 text-cs-primary" />
               <div className="flex flex-col text-left">
@@ -316,10 +395,10 @@ export default function AntigravityDashboard() {
                     isAdmin ? 'text-amber-700 font-extrabold' : 'text-teal-700'
                   }`}
                 >
-                  {userSession.rol || 'Administrador'}
+                  {userSession.rol || 'Operador'}
                 </span>
               </div>
-            </button>
+            </div>
 
             <button
               onClick={fetchData}
@@ -361,43 +440,50 @@ export default function AntigravityDashboard() {
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
             {/* Tarjetas de Stock por Punto de Entrega */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {stocks.map((s) => {
-                const disponible = s.stock_recibido - s.stock_entregado;
-                const bajoStock = disponible <= s.stock_minimo_alerta;
-                const isMyPoint = userSession.punto_entrega === s.estacion;
+            {stocks.length === 0 ? (
+              <div className="p-4 bg-white rounded-2xl border border-slate-200/80 text-center text-slate-500 font-medium text-xs flex items-center justify-center space-x-2">
+                <MapPin className="w-4 h-4 text-slate-400" />
+                <span>No hay Puntos de Entrega registrados. Ingrese a <b>Puntos de Entrega</b> en la barra superior para registrar sus estaciones.</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {stocks.map((s) => {
+                  const disponible = s.stock_recibido - s.stock_entregado;
+                  const bajoStock = disponible <= s.stock_minimo_alerta;
+                  const isMyPoint = userSession.punto_entrega === s.estacion;
 
-                return (
-                  <div
-                    key={s.estacion}
-                    className={`p-4 rounded-2xl shadow-sm border transition relative ${
-                      isMyPoint
-                        ? 'bg-emerald-50/50 border-cs-primary ring-2 ring-cs-primary/30'
-                        : 'bg-white border-slate-200/80 hover:border-cs-primary/40'
-                    }`}
-                  >
-                    {isMyPoint && (
-                      <span className="absolute -top-2.5 left-3 bg-cs-primary text-white text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shadow-xs">
-                        Mi Punto de Entrega
-                      </span>
-                    )}
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-bold text-cs-primary uppercase tracking-wide truncate max-w-[130px]">{s.estacion}</span>
-                      {bajoStock ? (
-                        <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0" />
-                      ) : (
-                        <ShieldCheck className="w-4 h-4 text-cs-primary flex-shrink-0" />
+                  return (
+                    <div
+                      key={s.estacion}
+                      className={`p-4 rounded-2xl shadow-sm border transition relative ${
+                        isMyPoint
+                          ? 'bg-emerald-50/50 border-cs-primary ring-2 ring-cs-primary/30'
+                          : 'bg-white border-slate-200/80 hover:border-cs-primary/40'
+                      }`}
+                    >
+                      {isMyPoint && (
+                        <span className="absolute -top-2.5 left-3 bg-cs-primary text-white text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full shadow-xs">
+                          Mi Punto de Entrega
+                        </span>
                       )}
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-bold text-cs-primary uppercase tracking-wide truncate max-w-[130px]">{s.estacion}</span>
+                        {bajoStock ? (
+                          <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0" />
+                        ) : (
+                          <ShieldCheck className="w-4 h-4 text-cs-primary flex-shrink-0" />
+                        )}
+                      </div>
+                      <div className="text-2xl font-black text-slate-900">{disponible} <span className="text-xs font-normal text-slate-500">disp.</span></div>
+                      <div className="text-xs text-slate-500 mt-1 flex justify-between">
+                        <span>Entregados: <b className="text-slate-800">{s.stock_entregado}</b></span>
+                        <span>Recibidos: {s.stock_recibido}</span>
+                      </div>
                     </div>
-                    <div className="text-2xl font-black text-slate-900">{disponible} <span className="text-xs font-normal text-slate-500">disp.</span></div>
-                    <div className="text-xs text-slate-500 mt-1 flex justify-between">
-                      <span>Entregados: <b className="text-slate-800">{s.stock_entregado}</b></span>
-                      <span>Recibidos: {s.stock_recibido}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Formulario + Tabla de Registros */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -476,12 +562,13 @@ export default function AntigravityDashboard() {
                         <th className="p-3">Nombre Receptor</th>
                         <th className="p-3">Usuario Registrador</th>
                         <th className="p-3">Observaciones</th>
+                        {isAdmin && <th className="p-3 text-center">Acciones</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {filteredDeliveries.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="p-6 text-center text-slate-400">
+                          <td colSpan={isAdmin ? 9 : 8} className="p-6 text-center text-slate-400">
                             No se encontraron registros de entrega.
                           </td>
                         </tr>
@@ -508,6 +595,28 @@ export default function AntigravityDashboard() {
                               {item.operador_runner}
                             </td>
                             <td className="p-3 text-slate-500 max-w-[150px] truncate">{item.observaciones || '-'}</td>
+                            {isAdmin && (
+                              <td className="p-3 text-center whitespace-nowrap">
+                                <div className="flex items-center justify-center space-x-1.5">
+                                  <button
+                                    onClick={() => handleStartEditDelivery(item)}
+                                    className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition flex items-center space-x-1"
+                                    title="Editar entrega"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                    <span>Editar</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteDelivery(item)}
+                                    className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center space-x-1"
+                                    title="Eliminar entrega"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>Eliminar</span>
+                                  </button>
+                                </div>
+                              </td>
+                            )}
                           </tr>
                         ))
                       )}
@@ -519,6 +628,116 @@ export default function AntigravityDashboard() {
           </div>
         )}
       </main>
+
+      {/* Modal de Edición de Entrega por Administrador */}
+      {editingDelivery && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
+            <div className="bg-cs-dark text-white p-4 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Edit2 className="w-5 h-5 text-cs-accent" />
+                <h3 className="font-bold text-sm">Modificar Registro de Entrega</h3>
+              </div>
+              <button
+                onClick={() => setEditingDelivery(null)}
+                className="p-1 text-slate-300 hover:text-white rounded-lg transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateDelivery} className="p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-cs-primary uppercase mb-1">Punto de Entrega *</label>
+                  <select
+                    value={editEstacion}
+                    onChange={(e) => setEditEstacion(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                    required
+                  >
+                    {availableStations.map((st) => (
+                      <option key={st} value={st}>
+                        {st}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-cs-primary uppercase mb-1">Dominio / Patente *</label>
+                  <input
+                    type="text"
+                    value={editDominio}
+                    onChange={(e) => setEditDominio(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-xs uppercase focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-cs-primary uppercase mb-1">TAG Serial *</label>
+                  <input
+                    type="text"
+                    value={editTagSerial}
+                    onChange={(e) => setEditTagSerial(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-xs uppercase focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-cs-primary uppercase mb-1">DNI / CUIT *</label>
+                  <input
+                    type="text"
+                    value={editDniCuit}
+                    onChange={(e) => setEditDniCuit(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Nombre Receptor (Opcional)</label>
+                <input
+                  type="text"
+                  value={editNombreReceptor}
+                  onChange={(e) => setEditNombreReceptor(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Observaciones (Opcional)</label>
+                <input
+                  type="text"
+                  value={editObservaciones}
+                  onChange={(e) => setEditObservaciones(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center space-x-3 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 py-3 bg-cs-primary hover:bg-cs-dark text-white font-bold text-xs rounded-xl transition shadow-md flex items-center justify-center space-x-1.5 uppercase"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Guardar Cambios</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingDelivery(null)}
+                  className="px-4 py-3 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition uppercase"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

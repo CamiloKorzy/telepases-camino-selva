@@ -99,6 +99,12 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     const tagClean = formData.tag_serial.trim().toUpperCase();
 
     // Campos estrictamente obligatorios: Dominio, DNI/CUIT, TAG Serial y Estación
+    if (!formData.estacion || deliveryPoints.length === 0) {
+      setMessage({ type: 'error', text: 'Debe dar de alta al menos un Punto de Entrega en la pestaña "Puntos de Entrega" antes de registrar entregas.' });
+      setLoading(false);
+      return;
+    }
+
     if (!formData.dominio || !formData.dni_cuit || !tagClean) {
       setMessage({ type: 'error', text: 'Por favor completá los datos obligatorios: Dominio, DNI/CUIT y TAG.' });
       setLoading(false);
@@ -170,6 +176,11 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     onDeliverySuccess();
   };
 
+  const isPointLocked =
+    currentUser.rol === 'Operador' &&
+    !!currentUser.punto_entrega &&
+    currentUser.punto_entrega !== 'Todos';
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
       {/* Header del Formulario con Operador Activo */}
@@ -212,14 +223,28 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                 name="estacion"
                 value={formData.estacion}
                 onChange={handleChange}
-                className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 font-semibold text-slate-800 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                disabled={isPointLocked || deliveryPoints.length === 0}
+                className={`w-full p-3 rounded-xl border font-semibold text-slate-800 ${
+                  isPointLocked || deliveryPoints.length === 0
+                    ? 'bg-slate-100 border-slate-200 cursor-not-allowed text-slate-600'
+                    : 'bg-slate-50 border-slate-300 focus:ring-2 focus:ring-cs-primary focus:outline-none'
+                }`}
               >
-                {deliveryPoints.map((pt) => (
-                  <option key={pt} value={pt}>
-                    {pt}
-                  </option>
-                ))}
+                {deliveryPoints.length === 0 ? (
+                  <option value="">No hay Puntos de Entrega registrados</option>
+                ) : (
+                  deliveryPoints.map((pt) => (
+                    <option key={pt} value={pt}>
+                      {pt}
+                    </option>
+                  ))
+                )}
               </select>
+              {isPointLocked && (
+                <p className="text-[11px] text-amber-700 font-medium mt-1">
+                  Punto de entrega fijo para su perfil de Operador.
+                </p>
+              )}
             </div>
 
             {/* Nº Serie TAG RFID */}

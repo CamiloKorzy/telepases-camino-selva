@@ -2,12 +2,51 @@
 
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { UserSession } from '@/types/database';
+import { UserProfile, UserSession } from '@/types/database';
 import { Lock, Mail, LogIn, AlertCircle, ShieldCheck } from 'lucide-react';
 
 interface LoginFormProps {
   onLoginSuccess: (session: UserSession) => void;
 }
+
+const DEFAULT_ACCOUNTS: UserProfile[] = [
+  {
+    id: '1',
+    email: 'camilo.k@ceeenriquez.com',
+    nombre: 'Camilo Korzyniewski',
+    password_hash: 'admin123',
+    rol: 'Administrador',
+    punto_entrega: 'Todos',
+    activo: true,
+  },
+  {
+    id: '2',
+    email: 'admin@caminoselva.com',
+    nombre: 'Administrador General',
+    password_hash: 'admin123',
+    rol: 'Administrador',
+    punto_entrega: 'Todos',
+    activo: true,
+  },
+  {
+    id: '3',
+    email: 'camilo.k@caminoselva.com',
+    nombre: 'Camilo Korzyniewski',
+    password_hash: 'admin123',
+    rol: 'Administrador',
+    punto_entrega: 'Santa Ana',
+    activo: true,
+  },
+  {
+    id: '4',
+    email: 'operador@caminoselva.com',
+    nombre: 'Operador Santa Ana',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Santa Ana',
+    activo: true,
+  },
+];
 
 export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
   const [email, setEmail] = useState('');
@@ -29,89 +68,65 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
     }
 
     try {
-      // 1. Acceso directo de Administrador para Camilo o Admin (acepta cualquier contraseña)
-      if (
-        emailClean.includes('camilo') ||
-        emailClean.includes('ceeenriquez') ||
-        emailClean === 'admin' ||
-        emailClean.includes('admin@')
-      ) {
-        const session: UserSession = {
-          email: emailClean.includes('@') ? emailClean : `${emailClean}@ceeenriquez.com`,
-          nombre: 'Camilo Korzyniewski',
-          rol: 'Administrador',
-          activo: true,
-        };
-        localStorage.setItem('telepase_user_session', JSON.stringify(session));
-        onLoginSuccess(session);
-        return;
-      }
+      let registeredUsers: UserProfile[] = [];
 
-      // 2. Consultar usuarios guardados localmente
-      const localUsersStored = localStorage.getItem('telepase_registered_user_profiles');
-      if (localUsersStored) {
+      // 1. Obtener usuarios guardados en localStorage
+      const localStored = localStorage.getItem('telepase_registered_user_profiles');
+      if (localStored) {
         try {
-          const localUsers = JSON.parse(localUsersStored);
-          const found = localUsers.find((u: any) => u.email.toLowerCase() === emailClean);
-          if (found) {
-            if (found.activo === false) {
-              throw new Error('Su usuario ha sido DESACTIVADO por el Administrador.');
-            }
-            const session: UserSession = {
-              email: found.email,
-              nombre: found.nombre,
-              rol: found.rol || 'Operador',
-              punto_entrega: found.punto_entrega,
-              activo: true,
-            };
-            localStorage.setItem('telepase_user_session', JSON.stringify(session));
-            onLoginSuccess(session);
-            return;
-          }
+          registeredUsers = JSON.parse(localStored);
         } catch {}
       }
 
-      // 3. Consultar tabla user_profiles en Supabase si está disponible
+      // 2. Obtener usuarios de Supabase si la base de datos está disponible
       try {
-        const { data: dbUser } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('email', emailClean)
-          .maybeSingle();
-
-        if (dbUser) {
-          if (!dbUser.activo) {
-            throw new Error('Su usuario ha sido DESACTIVADO por el Administrador.');
-          }
-
-          const session: UserSession = {
-            email: dbUser.email,
-            nombre: dbUser.nombre,
-            rol: dbUser.rol,
-            punto_entrega: dbUser.punto_entrega,
-            activo: dbUser.activo,
-          };
-
-          localStorage.setItem('telepase_user_session', JSON.stringify(session));
-          onLoginSuccess(session);
-          return;
+        const { data: dbUsers } = await supabase.from('user_profiles').select('*');
+        if (dbUsers && dbUsers.length > 0) {
+          const userMap = new Map<string, UserProfile>();
+          [...dbUsers, ...registeredUsers].forEach((u) => userMap.set(u.email.toLowerCase(), u));
+          registeredUsers = Array.from(userMap.values());
         }
       } catch {}
 
-      // 4. Acceso para cualquier otro usuario de operacion con contraseña de al menos 3 caracteres
-      if (password.length >= 3) {
-        const session: UserSession = {
-          email: emailClean.includes('@') ? emailClean : `${emailClean}@caminoselva.com`,
-          nombre: emailClean.split('@')[0].toUpperCase(),
-          rol: 'Operador',
-          activo: true,
-        };
-        localStorage.setItem('telepase_user_session', JSON.stringify(session));
-        onLoginSuccess(session);
-        return;
+      // 3. Incluir cuentas por defecto si no existen aún en la lista
+      DEFAULT_ACCOUNTS.forEach((def) => {
+        if (!registeredUsers.some((u) => u.email.toLowerCase() === def.email.toLowerCase())) {
+          registeredUsers.push(def);
+        }
+      });
+
+      // 4. Buscar usuario coincidente por correo o nombre de usuario
+      const foundUser = registeredUsers.find((u) => {
+        const mailLower = u.email.toLowerCase();
+        const usernameLower = mailLower.split('@')[0];
+        return mailLower === emailClean || usernameLower === emailClean;
+      });
+
+      if (!foundUser) {
+        throw new Error('Usuario no registrado. Verifique su usuario o solicite su alta al Administrador.');
       }
 
-      throw new Error('Credenciales inválidas. Verifique su usuario y contraseña.');
+      if (foundUser.activo === false) {
+        throw new Error('Su usuario ha sido DESACTIVADO por el Administrador.');
+      }
+
+      // 5. Verificar contraseña exacta
+      const expectedPass = foundUser.password_hash || 'admin123';
+      if (password !== expectedPass) {
+        throw new Error('Contraseña incorrecta. Verifique la clave e intente nuevamente.');
+      }
+
+      // 6. Generar y guardar la sesión de usuario activa
+      const session: UserSession = {
+        email: foundUser.email,
+        nombre: foundUser.nombre,
+        rol: foundUser.rol || 'Operador',
+        punto_entrega: foundUser.punto_entrega || 'Todos',
+        activo: true,
+      };
+
+      localStorage.setItem('telepase_user_session', JSON.stringify(session));
+      onLoginSuccess(session);
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión.');
     } finally {

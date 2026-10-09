@@ -36,6 +36,15 @@ const DEFAULT_USERS: UserProfile[] = [
     punto_entrega: 'Santa Ana',
     activo: true,
   },
+  {
+    id: '4',
+    email: 'operador@caminoselva.com',
+    nombre: 'Operador Santa Ana',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Santa Ana',
+    activo: true,
+  },
 ];
 
 export default function UserManagement() {
@@ -242,6 +251,26 @@ export default function UserManagement() {
 
     setUsers(updatedUsers);
     localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updatedUsers));
+
+    // Si el usuario actualizado es el usuario logueado en la sesión actual, actualizar la sesión
+    const currentSessionRaw = localStorage.getItem('telepase_user_session');
+    if (currentSessionRaw) {
+      try {
+        const session = JSON.parse(currentSessionRaw);
+        if (session.email.toLowerCase() === editingUser.email.toLowerCase()) {
+          const updatedSession = {
+            ...session,
+            nombre: updatedUserData.nombre,
+            email: updatedUserData.email,
+            rol: updatedUserData.rol,
+            punto_entrega: updatedUserData.punto_entrega,
+            activo: updatedUserData.activo,
+          };
+          localStorage.setItem('telepase_user_session', JSON.stringify(updatedSession));
+          window.dispatchEvent(new Event('user_session_updated'));
+        }
+      } catch {}
+    }
 
     setMessage({
       type: 'success',

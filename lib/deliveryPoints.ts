@@ -1,49 +1,45 @@
 import { supabase } from '@/lib/supabase';
 import { PeajeStock } from '@/types/database';
 
-export const MASTER_DEFAULT_POINTS: PeajeStock[] = [
-  { estacion: 'Santa Ana', stock_recibido: 2000, stock_entregado: 0, stock_minimo_alerta: 150 },
-  { estacion: 'Colonia Victoria', stock_recibido: 1500, stock_entregado: 0, stock_minimo_alerta: 100 },
-  { estacion: 'Paraje Fachinal', stock_recibido: 1000, stock_entregado: 0, stock_minimo_alerta: 100 },
-  { estacion: 'Ituzaingó', stock_recibido: 1500, stock_entregado: 0, stock_minimo_alerta: 100 },
-];
+const STORAGE_KEY = 'telepase_local_delivery_points_v3';
 
 /**
- * Obtiene el Maestro Oficial de Puntos de Entrega (Supabase + LocalStorage + Defaults)
+ * Obtiene el Maestro Oficial de Puntos de Entrega (Supabase + LocalStorage)
+ * Si el usuario no ha dado de alta ningún Punto de Entrega, retorna []
  */
 export async function getMasterDeliveryPoints(): Promise<PeajeStock[]> {
   let remotePoints: PeajeStock[] = [];
-  let localPoints: PeajeStock[] = [];
 
   // 1. Intentar obtener desde Supabase (peaje_stock)
   try {
     const { data, error } = await supabase.from('peaje_stock').select('*').order('estacion', { ascending: true });
     if (!error && data && data.length > 0) {
-      remotePoints = data;
+      remotePoints = data.map((p) => ({
+        ...p,
+        stock_recibido: 0, // El stock recibido real se calculará a partir de los lotes/recepciones
+      }));
     }
   } catch {}
 
-  // 2. Intentar obtener desde LocalStorage
+  // 2. Intentar obtener desde LocalStorage de forma aislada sin fallback hardcodeado
   if (typeof window !== 'undefined') {
-    const stored = localStorage.getItem('telepase_local_delivery_points');
-    if (stored) {
+    // Limpiar claves antiguas con datos falsos si existen
+    localStorage.removeItem('telepase_local_delivery_points');
+
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored !== null) {
       try {
-        localPoints = JSON.parse(stored);
+        const localPoints: PeajeStock[] = JSON.parse(stored);
+        return localPoints;
       } catch {}
     }
   }
 
-  // 3. Combinar maestro asegurando que siempre existan los Puntos de Entrega
-  const map = new Map<string, PeajeStock>();
-
-  MASTER_DEFAULT_POINTS.forEach((p) => map.set(p.estacion, p));
-  localPoints.forEach((p) => map.set(p.estacion, p));
-  remotePoints.forEach((p) => map.set(p.estacion, p));
-
-  const result = Array.from(map.values());
+  // 3. Si no se han dado de alta puntos aún, retornar los puntos remotos de Supabase o vacíos []
+  const result = remotePoints;
 
   if (typeof window !== 'undefined') {
-    localStorage.setItem('telepase_local_delivery_points', JSON.stringify(result));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
   }
 
   return result;
@@ -53,7 +49,7 @@ export async function getMasterDeliveryPoints(): Promise<PeajeStock[]> {
  * Guarda un Punto de Entrega en el Maestro (Supabase y LocalStorage)
  */
 export async function saveMasterDeliveryPoint(point: PeajeStock): Promise<PeajeStock[]> {
-  // 1. Guardar en Supabase
+  // 1. Guardar en Supabase si está disponible
   try {
     await supabase.from('peaje_stock').upsert([point], { onConflict: 'estacion' });
   } catch {}
@@ -70,8 +66,28 @@ export async function saveMasterDeliveryPoint(point: PeajeStock): Promise<PeajeS
   }
 
   if (typeof window !== 'undefined') {
-    localStorage.setItem('telepase_local_delivery_points', JSON.stringify(updated));
-    // Disparar evento personalizado para sincronización entre componentes
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new Event('delivery_points_updated'));
+  }
+
+  return updated;
+}
+
+/**
+ * Elimina un Punto de Entrega del Maestro (Supabase y LocalStorage)
+ */
+export async function deleteMasterDeliveryPoint(stationName: string): Promise<PeajeStock[]> {
+  // 1. Eliminar de Supabase si está disponible
+  try {
+    await supabase.from('peaje_stock').delete().eq('estacion', stationName);
+  } catch {}
+
+  // 2. Eliminar de LocalStorage
+  const current = await getMasterDeliveryPoints();
+  const updated = current.filter((p) => p.estacion.toLowerCase() !== stationName.toLowerCase());
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     window.dispatchEvent(new Event('delivery_points_updated'));
   }
 

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagBatch, UserSession } from '@/types/database';
-import { Layers, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Calendar, Receipt } from 'lucide-react';
+import { Layers, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Calendar, Receipt, Edit2, Trash2, X, Save } from 'lucide-react';
 
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 
@@ -19,6 +19,7 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [editingBatch, setEditingBatch] = useState<TagBatch | null>(null);
 
   // Formulario nuevo lote
   const [fechaRecepcion, setFechaRecepcion] = useState<string>(
@@ -102,7 +103,7 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
     fetchBatches();
   }, []);
 
-  const handleCreateBatch = async (e: React.FormEvent) => {
+  const handleSaveBatch = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setMessage(null);
@@ -123,9 +124,9 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
       return;
     }
 
-    const newBatch: TagBatch = {
-      id: crypto.randomUUID(),
-      created_at: new Date().toISOString(),
+    const batchPayload: TagBatch = {
+      id: editingBatch ? editingBatch.id : crypto.randomUUID(),
+      created_at: editingBatch ? editingBatch.created_at : new Date().toISOString(),
       fecha_recepcion: fechaRecepcion || new Date().toISOString().split('T')[0],
       estacion,
       serial_desde: desdeClean,
@@ -133,52 +134,91 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
       cantidad: parsedCantidad,
       numero_remito: numeroRemito.trim(),
       observaciones: observaciones.trim(),
-      usuario_registro: currentUser.nombre || currentUser.email,
+      usuario_registro: editingBatch ? editingBatch.usuario_registro : (currentUser.nombre || currentUser.email),
     };
 
     try {
-      const { error } = await supabase.from('tag_batches').insert([
-        {
-          fecha_recepcion: newBatch.fecha_recepcion,
-          estacion: newBatch.estacion,
-          serial_desde: newBatch.serial_desde,
-          serial_hasta: newBatch.serial_hasta,
-          cantidad: newBatch.cantidad,
-          numero_remito: newBatch.numero_remito,
-          observaciones: newBatch.observaciones,
-          usuario_registro: newBatch.usuario_registro,
-        },
-      ]);
-
-      if (error) console.warn('Supabase no disponible para lotes:', error.message);
+      if (editingBatch && editingBatch.id) {
+        await supabase.from('tag_batches').update(batchPayload).eq('id', editingBatch.id);
+      } else {
+        await supabase.from('tag_batches').insert([batchPayload]);
+      }
     } catch {}
 
     // Actualizar almacenamiento local
     const stored = localStorage.getItem(LOCAL_BATCHES_KEY);
     const prevBatches: TagBatch[] = stored ? JSON.parse(stored) : [];
-    const updatedBatches = [newBatch, ...prevBatches];
-    localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(updatedBatches));
+    let updatedBatches: TagBatch[] = [];
 
-    // Actualizar recepción en peaje_stock
-    try {
-      await supabase.rpc('increment_stock_recibido', {
-        p_estacion: estacion,
-        p_cantidad: parsedCantidad,
-      });
-    } catch {}
+    if (editingBatch) {
+      updatedBatches = prevBatches.map((b) =>
+        b.id === editingBatch.id || (b.serial_desde === editingBatch.serial_desde && b.estacion === editingBatch.estacion)
+          ? batchPayload
+          : b
+      );
+    } else {
+      updatedBatches = [batchPayload, ...prevBatches];
+    }
+    localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(updatedBatches));
 
     setMessage({
       type: 'success',
-      text: `¡Lote de ${parsedCantidad} TAGs (del ${desdeClean} al ${hastaClean}) habilitado exitosamente para ${estacion}!`,
+      text: editingBatch
+        ? `¡Lote (${desdeClean} al ${hastaClean}) de ${estacion} actualizado correctamente!`
+        : `¡Lote de ${parsedCantidad} TAGs (${desdeClean} al ${hastaClean}) registrado exitosamente para ${estacion}!`,
     });
 
+    handleResetForm();
+    setSubmitting(false);
+
+    fetchBatches();
+    onBatchCreated();
+  };
+
+  const handleStartEditBatch = (b: TagBatch) => {
+    setEditingBatch(b);
+    setFechaRecepcion(b.fecha_recepcion || new Date().toISOString().split('T')[0]);
+    setEstacion(b.estacion);
+    setNumeroRemito(b.numero_remito || '');
+    setSerialDesde(b.serial_desde);
+    setSerialHasta(b.serial_hasta);
+    setCantidadInput(String(b.cantidad));
+    setObservaciones(b.observaciones || '');
+    setMessage(null);
+  };
+
+  const handleResetForm = () => {
+    setEditingBatch(null);
     setSerialDesde('');
     setSerialHasta('');
     setCantidadInput('');
     setNumeroRemito('');
     setObservaciones('');
-    setSubmitting(false);
+  };
 
+  const handleDeleteBatch = async (b: TagBatch) => {
+    if (!confirm(`¿Está seguro de que desea eliminar la recepción del lote ${b.serial_desde} - ${b.serial_hasta} en ${b.estacion}?`)) {
+      return;
+    }
+
+    try {
+      if (b.id) {
+        await supabase.from('tag_batches').delete().eq('id', b.id);
+      }
+    } catch {}
+
+    const stored = localStorage.getItem(LOCAL_BATCHES_KEY);
+    if (stored) {
+      try {
+        const prevBatches: TagBatch[] = JSON.parse(stored);
+        const updated = prevBatches.filter(
+          (item) => item.id !== b.id && !(item.serial_desde === b.serial_desde && item.estacion === b.estacion)
+        );
+        localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(updated));
+      } catch {}
+    }
+
+    setMessage({ type: 'success', text: `Lote de ${b.estacion} (${b.serial_desde} - ${b.serial_hasta}) eliminado correctamente.` });
     fetchBatches();
     onBatchCreated();
   };
@@ -190,14 +230,28 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
         <div className="bg-cs-dark text-white p-4 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <PlusCircle className="w-5 h-5 text-cs-accent" />
-            <h3 className="font-bold text-base">Recepción y Alta de Lotes de TAGs</h3>
+            <h3 className="font-bold text-base">
+              {editingBatch ? 'Modificar Recepción de Lote de TAGs' : 'Recepción y Alta de Lotes de TAGs'}
+            </h3>
           </div>
-          <span className="text-[11px] font-bold bg-white/10 text-emerald-200 px-3 py-1 rounded-full border border-white/15">
-            Función Rol Administrador
-          </span>
+          <div className="flex items-center space-x-2">
+            {editingBatch && (
+              <button
+                type="button"
+                onClick={handleResetForm}
+                className="text-xs bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1 rounded-lg flex items-center space-x-1"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Cancelar Edición</span>
+              </button>
+            )}
+            <span className="text-[11px] font-bold bg-white/10 text-emerald-200 px-3 py-1 rounded-full border border-white/15">
+              Función Rol Administrador
+            </span>
+          </div>
         </div>
 
-        <form onSubmit={handleCreateBatch} className="p-5 space-y-4">
+        <form onSubmit={handleSaveBatch} className="p-5 space-y-4">
           {message && (
             <div
               className={`p-3 rounded-xl flex items-center space-x-2 text-xs font-medium ${
@@ -375,12 +429,13 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
                 <th className="p-3">Unidades</th>
                 <th className="p-3">Registrado Por</th>
                 <th className="p-3">Observaciones</th>
+                {currentUser.rol === 'Administrador' && <th className="p-3 text-center">Acciones</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {batches.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-6 text-center text-slate-400">
+                  <td colSpan={9} className="p-6 text-center text-slate-400">
                     No se han registrado lotes de recepción de TAGs aún.
                   </td>
                 </tr>
@@ -401,6 +456,28 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
                     </td>
                     <td className="p-3 text-slate-700 font-semibold">{b.usuario_registro}</td>
                     <td className="p-3 text-slate-500 max-w-[180px] truncate">{b.observaciones || '-'}</td>
+                    {currentUser.rol === 'Administrador' && (
+                      <td className="p-3 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center space-x-1.5">
+                          <button
+                            onClick={() => handleStartEditBatch(b)}
+                            className="p-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition flex items-center space-x-1"
+                            title="Editar lote de recepción"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>Editar</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteBatch(b)}
+                            className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center space-x-1"
+                            title="Eliminar lote de recepción"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Eliminar</span>
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
