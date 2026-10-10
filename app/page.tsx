@@ -824,17 +824,17 @@ export default function AntigravityDashboard() {
               </div>
             )}
 
-            {/* Formulario / Grilla Detalle de Entregas */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Formulario / Grilla Detalle de Entregas en Ancho Completo */}
+            <div className="space-y-6">
               {/* Formulario con usuario autenticado (Oculto para Rol Consulta) */}
               {userSession.rol !== 'Consulta' && (
-                <div className="lg:col-span-5">
+                <div className="w-full">
                   <DeliveryForm currentUser={userSession} onDeliverySuccess={fetchData} />
                 </div>
               )}
 
-              {/* Listado Completo de Entregas con Exportación Excel */}
-              <div className={userSession.rol === 'Consulta' ? 'lg:col-span-12 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4' : 'lg:col-span-7 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4'}>
+              {/* Listado Completo de Entregas (Ancho Completo de Pantalla) */}
+              <div className="w-full bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center space-x-2">
                     <Layers className="w-5 h-5 text-cs-primary" />
