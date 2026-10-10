@@ -391,44 +391,45 @@ export default function UserGuideModal({ isOpen, onClose }: UserGuideModalProps)
               </div>
             )}
 
-            {/* TEMA 6: ROLES Y CLAVES */}
+            {/* TEMA 6: ROLES Y PERMISOS DE SEGURIDAD */}
             {activeTopic === 'roles' && (
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
                   <Users className="w-5 h-5 text-cs-primary" />
-                  <h3 className="font-bold text-base text-slate-900">6. Permisos de Usuario y Claves Maestras por Defecto</h3>
+                  <h3 className="font-bold text-base text-slate-900">6. Permisos de Usuario y Niveles de Acceso</h3>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 text-xs">
                   <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl space-y-1.5">
                     <b className="text-amber-900 text-sm">Rol Administrador</b>
                     <p className="text-amber-950 leading-relaxed">
-                      Acceso total. Puede gestionar usuarios, crear lotes de fábrica, editar entregas o limpiar la base de datos.
+                      Acceso total. Puede gestionar usuarios, crear lotes de fábrica, editar entregas o realizar la limpieza del sistema.
                     </p>
-                    <div className="pt-1 font-mono font-bold text-slate-900 bg-amber-100 p-1.5 rounded text-center">
-                      Clave: Cee$$2026
-                    </div>
                   </div>
 
                   <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-1.5">
                     <b className="text-emerald-900 text-sm">Rol Operador</b>
                     <p className="text-emerald-950 leading-relaxed">
-                      Perfil para trabajo diario en casilla de peaje. Registra entregas y confirma transferencias.
+                      Perfil para trabajo diario en casilla de peaje. Registra entregas en vía y confirma transferencias recepcionadas.
                     </p>
-                    <div className="pt-1 font-mono font-bold text-slate-900 bg-emerald-100 p-1.5 rounded text-center">
-                      Clave: op123456
-                    </div>
                   </div>
 
                   <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-2xl space-y-1.5">
                     <b className="text-sky-900 text-sm">Rol Consulta</b>
                     <p className="text-sky-950 leading-relaxed">
-                      Perfil de auditoría y supervisión. Solo lectura de stocks e informes (no puede registrar ni editar).
+                      Perfil de auditoría y supervisión. Solo lectura de stocks e informes (no posee permisos de edición o registración).
                     </p>
-                    <div className="pt-1 font-mono font-bold text-slate-900 bg-sky-100 p-1.5 rounded text-center">
-                      Clave: consulta123
-                    </div>
                   </div>
+                </div>
+
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+                  <b className="text-slate-900 flex items-center space-x-1.5">
+                    <Lock className="w-4 h-4 text-cs-primary" />
+                    <span>Seguridad de Credenciales de Acceso:</span>
+                  </b>
+                  <p className="text-slate-700 leading-relaxed">
+                    Cada usuario debe ingresar con sus credenciales institucionales otorgadas por el Administrador. Si necesita un restablecimiento de clave o alta de nuevo usuario, contacte al Administrador General.
+                  </p>
                 </div>
               </div>
             )}

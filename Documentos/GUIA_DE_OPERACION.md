@@ -97,15 +97,15 @@ Si llega un chofer o apoderado a registrar **10 camiones de la misma empresa**:
 
 ---
 
-## 6. USUARIOS, ROLES Y CLAVES DE RESPALDO
+## 6. USUARIOS Y PERMISOS DE SEGURIDAD
 
-| Rol de Usuario | Permisos y Funciones | Clave Maestra por Defecto |
-| :--- | :--- | :--- |
-| **Administrador** | Acceso total: Usuarios, Alta de Lotes, Edición/Eliminación de entregas y Botón "Limpiar Entregas". | `Cee$$2026` |
-| **Operador** | Trabajo en casilla: Registración de entregas en vía y confirmación de transferencias de su peaje. | `op123456` |
-| **Consulta** | Auditoría y Supervisión: Solo lectura de inventarios, tarjetas e informes. | `consulta123` |
+| Rol de Usuario | Permisos y Alcance en la Plataforma |
+| :--- | :--- |
+| **Administrador** | Acceso total: Usuarios, Alta de Lotes, Edición/Eliminación de entregas y Botón "Limpiar Entregas". |
+| **Operador** | Trabajo en casilla: Registración de entregas en vía y confirmación de transferencias de su peaje. |
+| **Consulta** | Auditoría y Supervisión: Solo lectura de inventarios, tarjetas e informes (sin permisos de edición). |
 
-*Nota*: Se recomienda activar el tilde **"Recordar mi usuario"** en la pantalla de inicio de sesión para que el sistema recuerde tu correo y no tengas que volver a escribirlo.
+*Seguridad de Acceso*: Cada usuario debe ingresar con su correo corporativo y contraseña asignada por el Administrador. Se recomienda activar el tilde **"Recordar mi usuario"** en la pantalla de inicio de sesión para que el sistema recuerde tu dirección de correo electrónico en el navegador.
 
 ---
 
