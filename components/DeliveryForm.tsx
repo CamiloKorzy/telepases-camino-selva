@@ -77,7 +77,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     return () => window.removeEventListener('delivery_points_updated', handleUpdated);
   }, [currentUser]);
 
-  // Generación automática de filas masivas al cambiar Serial Inicial o Cantidad
+  // Generación automática de filas masivas al cambiar Serial Inicial o Cantidad (omitimos automáticamente los ya entregados o sin stock)
   useEffect(() => {
     if (mode !== 'masiva') return;
 
@@ -109,20 +109,48 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     const startNum = parseInt(numStr, 10);
 
     const newRows: BulkDeliveryRow[] = [];
-    for (let i = 0; i < count; i++) {
-      const currentNum = startNum + i;
+    let currentNum = startNum;
+    let foundCount = 0;
+    let iterations = 0;
+    const maxIterations = count * 10 + 100;
+
+    while (foundCount < count && iterations < maxIterations) {
       const serialFormatted = `${prefix}${String(currentNum).padStart(padLen, '0')}`;
-      newRows.push({
-        id: String(i + 1),
-        tagSerial: serialFormatted,
-        dominio: bulkRows[i]?.dominio || '',
-        dniCuit: bulkRows[i]?.dniCuit || sharedDniCuit,
-        nombre: bulkRows[i]?.nombre || sharedNombre,
-      });
+      const val = validateTagDelivery(bulkStation, serialFormatted);
+
+      // Si el TAG está disponible en la estación y NO fue entregado previa ni actualmente, agregarlo a la sugerencia
+      if (val.valid) {
+        const existingIdx = foundCount;
+        newRows.push({
+          id: String(foundCount + 1),
+          tagSerial: serialFormatted,
+          dominio: bulkRows[existingIdx]?.dominio || '',
+          dniCuit: bulkRows[existingIdx]?.dniCuit || sharedDniCuit,
+          nombre: bulkRows[existingIdx]?.nombre || sharedNombre,
+        });
+        foundCount++;
+      }
+      currentNum++;
+      iterations++;
+    }
+
+    // Fallback de seguridad si no se hallaron suficientes disponibles continuos
+    if (foundCount < count) {
+      for (let i = foundCount; i < count; i++) {
+        const fallbackNum = startNum + i;
+        const serialFormatted = `${prefix}${String(fallbackNum).padStart(padLen, '0')}`;
+        newRows.push({
+          id: String(i + 1),
+          tagSerial: serialFormatted,
+          dominio: bulkRows[i]?.dominio || '',
+          dniCuit: bulkRows[i]?.dniCuit || sharedDniCuit,
+          nombre: bulkRows[i]?.nombre || sharedNombre,
+        });
+      }
     }
 
     setBulkRows(newRows);
-  }, [startSerial, bulkQuantity, mode]);
+  }, [startSerial, bulkQuantity, bulkStation, mode]);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -719,9 +747,22 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                   <Hash className="w-4 h-4 text-cs-primary" />
                   <span>2. Asignación de Patentes / Dominios por Vehículo</span>
                 </span>
-                <span className="text-xs font-extrabold text-emerald-900 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full font-mono">
-                  {bulkRows.length} Unidades
-                </span>
+                <div className="flex items-center space-x-2">
+                  {bulkInvalidRowsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setBulkRows((prev) => prev.filter((r) => validateTagDelivery(bulkStation, r.tagSerial).valid))}
+                      className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg hover:bg-rose-100 transition flex items-center space-x-1 shadow-xs"
+                      title="Quitar de la lista las filas que ya fueron entregadas o no están en stock"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Omitir {bulkInvalidRowsCount} no disponible(s)</span>
+                    </button>
+                  )}
+                  <span className="text-xs font-extrabold text-emerald-900 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full font-mono">
+                    {bulkRows.length} Unidades
+                  </span>
+                </div>
               </div>
 
               {bulkRows.length === 0 ? (
@@ -746,6 +787,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                         const rowVal = row.tagSerial.trim()
                           ? validateTagDelivery(bulkStation, row.tagSerial)
                           : null;
+
+                        const isAlreadyDelivered = rowVal && !rowVal.valid && rowVal.error?.toLowerCase().includes('ya fue entregado');
 
                         return (
                           <tr key={row.id} className={`transition ${rowVal && !rowVal.valid ? 'bg-rose-50/40' : 'hover:bg-emerald-50/30'}`}>
@@ -780,7 +823,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                                     className="inline-flex items-center space-x-1 text-[10px] font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded-md border border-rose-200 cursor-help"
                                   >
                                     <AlertCircle className="w-3 h-3 text-rose-600" />
-                                    <span>Sin Stock</span>
+                                    <span>{isAlreadyDelivered ? 'Ya Entregado' : 'Sin Stock'}</span>
                                   </span>
                                 )
                               ) : (
