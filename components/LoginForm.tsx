@@ -48,6 +48,24 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
     activo: true,
   },
   {
+    id: '4b',
+    email: 'peaje.santaana@caminoselva.com',
+    nombre: 'Peaje Santa Ana',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Santa Ana',
+    activo: true,
+  },
+  {
+    id: '4c',
+    email: 'santaana@caminoselva.com',
+    nombre: 'Peaje Santa Ana',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Santa Ana',
+    activo: true,
+  },
+  {
     id: '5',
     email: 'consulta@caminoselva.com',
     nombre: 'Auditor / Consulta Inventario',
@@ -66,8 +84,53 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
     activo: true,
   },
   {
+    id: '6b',
+    email: 'peaje.coloniavictoria@caminoselva.com',
+    nombre: 'Peaje Colonia Victoria',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Colonia Victoria',
+    activo: true,
+  },
+  {
+    id: '6c',
+    email: 'coloniavictoria@caminoselva.com',
+    nombre: 'Peaje Colonia Victoria',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Colonia Victoria',
+    activo: true,
+  },
+  {
     id: '7',
     email: 'operador.parajefachinal@caminoselva.com',
+    nombre: 'Peaje Paraje Fachinal',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Paraje Fachinal',
+    activo: true,
+  },
+  {
+    id: '7b',
+    email: 'peaje.fachinal@caminoselva.com',
+    nombre: 'Peaje Paraje Fachinal',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Paraje Fachinal',
+    activo: true,
+  },
+  {
+    id: '7c',
+    email: 'fachinal@caminoselva.com',
+    nombre: 'Peaje Paraje Fachinal',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Paraje Fachinal',
+    activo: true,
+  },
+  {
+    id: '7d',
+    email: 'peaje.parajefachinal@caminoselva.com',
     nombre: 'Peaje Paraje Fachinal',
     password_hash: 'op123456',
     rol: 'Operador',
@@ -81,6 +144,33 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
     password_hash: 'op123456',
     rol: 'Operador',
     punto_entrega: 'Ituzaingó',
+    activo: true,
+  },
+  {
+    id: '8b',
+    email: 'peaje.ituzaingo@caminoselva.com',
+    nombre: 'Peaje Ituzaingó',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Ituzaingó',
+    activo: true,
+  },
+  {
+    id: '8c',
+    email: 'ituzaingo@caminoselva.com',
+    nombre: 'Peaje Ituzaingó',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Ituzaingó',
+    activo: true,
+  },
+  {
+    id: '9',
+    email: 'oficinacentral@caminoselva.com',
+    nombre: 'Oficina Central',
+    password_hash: 'admin123',
+    rol: 'Administrador',
+    punto_entrega: 'Todos',
     activo: true,
   },
 ];
@@ -132,11 +222,32 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         }
       });
 
-      // 4. Buscar usuario coincidente por correo o nombre de usuario
+      const normalizeUserKey = (str: string): string => {
+        return str
+          .toLowerCase()
+          .replace(/@.*$/, '')
+          .replace(/^(peaje|operador|estaci[oó]n|oficina)\.?:?\s*/i, '')
+          .replace(/^paraje\.?:?\s*/i, '')
+          .replace(/[\.\_\-\s]/g, '');
+      };
+
+      // 4. Buscar usuario coincidente por correo, usuario o estación
       const foundUser = registeredUsers.find((u) => {
         const mailLower = u.email.toLowerCase();
         const usernameLower = mailLower.split('@')[0];
-        return mailLower === emailClean || usernameLower === emailClean;
+        const inputMailLower = emailClean;
+        const inputUsernameLower = inputMailLower.split('@')[0];
+
+        if (mailLower === inputMailLower) return true;
+        if (usernameLower === inputUsernameLower) return true;
+
+        const normInput = normalizeUserKey(inputMailLower);
+        const normUser = normalizeUserKey(mailLower);
+        const normStation = u.punto_entrega ? normalizeUserKey(u.punto_entrega) : '';
+
+        if (normInput && (normInput === normUser || normInput === normStation)) return true;
+
+        return false;
       });
 
       if (!foundUser) {
