@@ -51,7 +51,7 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
 
   // Estados de Filtros de Reporte y Rastreabilidad
   const [filterState, setFilterState] = useState<'Todos' | 'En Tránsito' | 'Recibido'>('Todos');
-  const [dateFilterMode, setDateFilterMode] = useState<'todos' | 'hoy' | 'semana' | 'mes' | 'rango'>('hoy');
+  const [dateFilterMode, setDateFilterMode] = useState<'todos' | 'hoy' | 'semana' | 'mes' | 'rango'>('todos');
   const [customFechaDesde, setCustomFechaDesde] = useState<string>('');
   const [customFechaHasta, setCustomFechaHasta] = useState<string>('');
   const [tipoFilter, setTipoFilter] = useState<'Todos' | 'Ingreso Lote' | 'Transferencia'>('Todos');

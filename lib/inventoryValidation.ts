@@ -1,5 +1,6 @@
 import { TagBatch, TagTransfer, TagDelivery } from '@/types/database';
 import { supabase } from '@/lib/supabase';
+import { DEFAULT_BATCHES } from '@/lib/deliveryPoints';
 
 const LOCAL_BATCHES_KEY = 'telepase_local_tag_batches';
 const LOCAL_TRANSFERS_KEY = 'telepase_local_tag_transfers';
@@ -22,6 +23,9 @@ export function getAllBatches(): TagBatch[] {
         localBatches = JSON.parse(stored);
       } catch {}
     }
+  }
+  if (localBatches.length === 0) {
+    localBatches = DEFAULT_BATCHES;
   }
   return localBatches;
 }

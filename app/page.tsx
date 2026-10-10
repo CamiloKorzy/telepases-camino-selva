@@ -11,7 +11,7 @@ import BatchManagement from '@/components/BatchManagement';
 import DeliveryPointManagement from '@/components/DeliveryPointManagement';
 import TransferManagement from '@/components/TransferManagement';
 import ScheduledReportModal from '@/components/ScheduledReportModal';
-import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName } from '@/lib/deliveryPoints';
+import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName, DEFAULT_BATCHES } from '@/lib/deliveryPoints';
 import ActivationDocManagement, { getActivationDocConfig, generateWhatsAppLink } from '@/components/ActivationDocManagement';
 import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -29,8 +29,8 @@ export default function AntigravityDashboard() {
 
   const docConfig = useMemo(() => getActivationDocConfig(), [activeTab]);
 
-  // Filtros temporales para indicadores y grilla (Default: Hoy)
-  const [dateFilterMode, setDateFilterMode] = useState<'todos' | 'hoy' | 'semana' | 'mes' | 'rango'>('hoy');
+  // Filtros temporales para indicadores y grilla (Default: Todos)
+  const [dateFilterMode, setDateFilterMode] = useState<'todos' | 'hoy' | 'semana' | 'mes' | 'rango'>('todos');
   const [customFechaDesde, setCustomFechaDesde] = useState<string>('');
   const [customFechaHasta, setCustomFechaHasta] = useState<string>('');
 
@@ -109,6 +109,13 @@ export default function AntigravityDashboard() {
         if (updated) {
           localStorage.setItem('telepase_local_tag_batches', JSON.stringify(localBatches));
         }
+      } catch {}
+    }
+
+    if (localBatches.length === 0) {
+      localBatches = DEFAULT_BATCHES;
+      try {
+        localStorage.setItem('telepase_local_tag_batches', JSON.stringify(localBatches));
       } catch {}
     }
 
@@ -238,7 +245,10 @@ export default function AntigravityDashboard() {
         const key = b.id || `${b.estacion}_${b.serial_desde}_${b.serial_hasta}`;
         if (!batchMap.has(key)) batchMap.set(key, b);
       });
-      const mergedBatches = Array.from(batchMap.values());
+      let mergedBatches = Array.from(batchMap.values());
+      if (mergedBatches.length === 0) {
+        mergedBatches = DEFAULT_BATCHES;
+      }
 
       // Combinar Transferencias
       const transferMap = new Map<string, TagTransfer>();

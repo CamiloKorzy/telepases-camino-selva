@@ -15,6 +15,66 @@ export function fixUserName(name?: string | null): string {
   return trimmed;
 }
 
+import { TagBatch } from '@/types/database';
+
+export const DEFAULT_BATCHES: TagBatch[] = [
+  {
+    id: 'batch-santa-ana-default',
+    created_at: '2026-10-01T00:00:00.000Z',
+    estacion: 'Santa Ana',
+    serial_desde: '63226500',
+    serial_hasta: '63227000',
+    cantidad: 500,
+    numero_remito: 'R-001',
+    observaciones: 'Lote Inicial de TAGs Santa Ana',
+    usuario_registro: 'Sistema / Carga Inicial',
+  },
+  {
+    id: 'batch-colonia-victoria-default',
+    created_at: '2026-10-01T00:00:00.000Z',
+    estacion: 'Colonia Victoria',
+    serial_desde: '63227001',
+    serial_hasta: '63227500',
+    cantidad: 500,
+    numero_remito: 'R-002',
+    observaciones: 'Lote Inicial de TAGs Colonia Victoria',
+    usuario_registro: 'Sistema / Carga Inicial',
+  },
+  {
+    id: 'batch-fachinal-default',
+    created_at: '2026-10-01T00:00:00.000Z',
+    estacion: 'Paraje Fachinal',
+    serial_desde: '63227501',
+    serial_hasta: '63228000',
+    cantidad: 500,
+    numero_remito: 'R-003',
+    observaciones: 'Lote Inicial de TAGs Paraje Fachinal',
+    usuario_registro: 'Sistema / Carga Inicial',
+  },
+  {
+    id: 'batch-ituzaingo-default',
+    created_at: '2026-10-01T00:00:00.000Z',
+    estacion: 'Ituzaingó',
+    serial_desde: '63228001',
+    serial_hasta: '63228500',
+    cantidad: 500,
+    numero_remito: 'R-004',
+    observaciones: 'Lote Inicial de TAGs Ituzaingó',
+    usuario_registro: 'Sistema / Carga Inicial',
+  },
+  {
+    id: 'batch-oficina-central-default',
+    created_at: '2026-10-01T00:00:00.000Z',
+    estacion: 'Oficina Central',
+    serial_desde: '63228501',
+    serial_hasta: '63229000',
+    cantidad: 500,
+    numero_remito: 'R-005',
+    observaciones: 'Lote Inicial de TAGs Oficina Central',
+    usuario_registro: 'Sistema / Carga Inicial',
+  },
+];
+
 const DEFAULT_STATIONS: PeajeStock[] = [
   { estacion: 'Santa Ana', stock_recibido: 0, stock_entregado: 0, stock_minimo_alerta: 150 },
   { estacion: 'Colonia Victoria', stock_recibido: 0, stock_entregado: 0, stock_minimo_alerta: 100 },

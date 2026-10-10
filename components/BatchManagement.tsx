@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { TagBatch, UserSession } from '@/types/database';
 import { Layers, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, Edit2, Trash2, X, Plus, Trash } from 'lucide-react';
 
-import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
+import { getMasterDeliveryPoints, DEFAULT_BATCHES } from '@/lib/deliveryPoints';
 import ConfirmModal from '@/components/ConfirmModal';
 
 const LOCAL_BATCHES_KEY = 'telepase_local_tag_batches';
@@ -84,6 +84,10 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
           localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(localBatches));
         }
       } catch {}
+    }
+
+    if (localBatches.length === 0) {
+      localBatches = DEFAULT_BATCHES;
     }
 
     if (localBatches.length > 0) {
