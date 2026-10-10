@@ -12,7 +12,8 @@ import DeliveryPointManagement from '@/components/DeliveryPointManagement';
 import TransferManagement from '@/components/TransferManagement';
 import ScheduledReportModal from '@/components/ScheduledReportModal';
 import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName } from '@/lib/deliveryPoints';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar } from 'lucide-react';
+import ActivationDocManagement, { getActivationDocConfig, generateWhatsAppLink } from '@/components/ActivationDocManagement';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 
 export default function AntigravityDashboard() {
@@ -23,8 +24,10 @@ export default function AntigravityDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<string>('Todas');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users' | 'settings_docs'>('dashboard');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+
+  const docConfig = useMemo(() => getActivationDocConfig(), [activeTab]);
 
   // Filtros temporales para indicadores y grilla (Default: Hoy)
   const [dateFilterMode, setDateFilterMode] = useState<'todos' | 'hoy' | 'semana' | 'mes' | 'rango'>('hoy');
@@ -605,6 +608,18 @@ export default function AntigravityDashboard() {
                     <Users className="w-3.5 h-3.5" />
                     <span>Usuarios</span>
                   </button>
+
+                  <button
+                    onClick={() => setActiveTab('settings_docs')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                      activeTab === 'settings_docs'
+                        ? 'bg-cs-primary text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Docs & Envíos</span>
+                  </button>
                 </>
               )}
             </div>
@@ -677,6 +692,11 @@ export default function AntigravityDashboard() {
         {/* VISTA 3: CONFIGURACIÓN Y USUARIOS (ADMINISTRADORES) */}
         {activeTab === 'settings_users' && isAdmin && (
           <UserManagement />
+        )}
+
+        {/* VISTA 4: CONFIGURACIÓN DE DOCUMENTOS DE ACTIVACIÓN Y ENVÍOS (ADMINISTRADORES) */}
+        {activeTab === 'settings_docs' && isAdmin && (
+          <ActivationDocManagement />
         )}
 
         {/* VISTA 4: PANEL PRINCIPAL DE ENTREGAS Y STOCK */}
@@ -948,17 +968,45 @@ export default function AntigravityDashboard() {
                             <td className="p-3 text-slate-700">{item.nombre_apellido || '-'}</td>
                             <td className="p-3 text-slate-700 font-mono text-[11px]">
                               {item.email_contacto || item.celular_contacto ? (
-                                <div className="space-y-0.5">
+                                <div className="space-y-1">
                                   {item.email_contacto && (
-                                    <div className="flex items-center space-x-1 text-sky-800" title={`Email: ${item.email_contacto}`}>
-                                      <Mail className="w-3 h-3 text-sky-600 flex-shrink-0" />
-                                      <span className="truncate max-w-[130px]">{item.email_contacto}</span>
+                                    <div className="flex items-center space-x-1">
+                                      <a
+                                        href={`mailto:${item.email_contacto}?subject=${encodeURIComponent(docConfig.email_subject || 'Folleto TelePASE')}&body=${encodeURIComponent(
+                                          (docConfig.email_body_template || '')
+                                            .replace(/{NOMBRE}/g, item.nombre_apellido || '')
+                                            .replace(/{DOMINIO}/g, item.dominio)
+                                            .replace(/{TAG}/g, item.tag_serial)
+                                            .replace(/{ESTACION}/g, item.estacion)
+                                        )}`}
+                                        className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md font-bold text-[10px] transition border ${
+                                          docConfig.email_active
+                                            ? 'bg-sky-50 text-sky-800 border-sky-300 hover:bg-sky-100'
+                                            : 'bg-slate-100 text-slate-500 border-slate-200 line-through opacity-70'
+                                        }`}
+                                        title={docConfig.email_active ? "Enviar Folleto e Instrucciones por Email" : "Envíos por Email Deshabilitados en Configuración"}
+                                      >
+                                        <Mail className="w-3 h-3 text-sky-600 flex-shrink-0" />
+                                        <span className="truncate max-w-[120px]">{item.email_contacto}</span>
+                                      </a>
                                     </div>
                                   )}
                                   {item.celular_contacto && (
-                                    <div className="flex items-center space-x-1 text-emerald-800 font-bold" title={`Celular: ${item.celular_contacto}`}>
-                                      <Phone className="w-3 h-3 text-emerald-600 flex-shrink-0" />
-                                      <span>{item.celular_contacto}</span>
+                                    <div className="flex items-center space-x-1">
+                                      <a
+                                        href={docConfig.whatsapp_active ? generateWhatsAppLink(item.celular_contacto, item.nombre_apellido || '', item.dominio, item.tag_serial, item.estacion, docConfig) : '#'}
+                                        target={docConfig.whatsapp_active ? "_blank" : "_self"}
+                                        rel="noopener noreferrer"
+                                        className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md font-bold text-[10px] transition border ${
+                                          docConfig.whatsapp_active
+                                            ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
+                                            : 'bg-slate-100 text-slate-500 border-slate-200 line-through opacity-70 cursor-not-allowed'
+                                        }`}
+                                        title={docConfig.whatsapp_active ? "Enviar Folleto e Instrucciones por WhatsApp" : "Envíos por WhatsApp Deshabilitados en Configuración"}
+                                      >
+                                        <Send className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+                                        <span>{item.celular_contacto}</span>
+                                      </a>
                                     </div>
                                   )}
                                 </div>

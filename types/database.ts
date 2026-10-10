@@ -22,6 +22,25 @@ export interface PeajeStock {
   stock_minimo_alerta: number;
   pendientes_recepcion?: number;
   email_notificacion?: string;
+  email_remitente?: string;
+  nombre_remitente?: string;
+  config_smtp?: string;
+  envio_email_activo?: boolean;
+  envio_whatsapp_activo?: boolean;
+  updated_at?: string;
+}
+
+export interface ActivationDocConfig {
+  id?: string;
+  pdf_url?: string;
+  pdf_name?: string;
+  image_url?: string;
+  image_name?: string;
+  email_active: boolean;
+  whatsapp_active: boolean;
+  email_subject?: string;
+  email_body_template?: string;
+  whatsapp_body_template?: string;
   updated_at?: string;
 }
 
