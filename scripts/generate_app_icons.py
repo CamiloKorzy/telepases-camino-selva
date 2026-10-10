@@ -54,57 +54,46 @@ def create_round_icon(symbol_img, size, bg_color='#0F291E', padding_percent=0.2)
 
 def main():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    logo_path = os.path.join(root_dir, 'public', 'logo.png')
+    iso_path = os.path.join(root_dir, 'Documentos', 'Logo', 'Isotipo - Color principal.png')
     
-    if not os.path.exists(logo_path):
-        print(f"Error: {logo_path} not found.")
+    if not os.path.exists(iso_path):
+        print(f"Error: {iso_path} not found.")
         return
 
-    full_logo = Image.open(logo_path).convert('RGBA')
-    w, h = full_logo.size
+    full_iso = Image.open(iso_path).convert('RGBA')
+    bbox = full_iso.getbbox()
+    symbol = full_iso.crop(bbox) if bbox else full_iso
     
-    # Crop left symbol
-    symbol = full_logo.crop((0, 0, int(h * 1.2), h))
-    sym_bbox = symbol.getbbox()
-    if sym_bbox:
-        symbol = symbol.crop(sym_bbox)
-    
-    # Recolor symbol to crisp white for dark background
-    r, g, b, a = symbol.split()
-    white_symbol = Image.merge('RGBA', (Image.new('L', symbol.size, 255),
-                                        Image.new('L', symbol.size, 255),
-                                        Image.new('L', symbol.size, 255),
-                                        a))
-    
-    print("Extracted symbol size:", symbol.size)
+    print("Source isotipo size:", full_iso.size, "Cropped symbol size:", symbol.size)
     
     # 1. Generate Favicons for Web
     public_dir = os.path.join(root_dir, 'public')
     app_dir = os.path.join(root_dir, 'app')
+    bg_color = '#FFFFFF'
     
     # Create 512x512 master icon
-    master_512 = create_square_icon(white_symbol, 512, bg_color='#0F291E', rounded=True, padding_percent=0.18)
+    master_512 = create_square_icon(symbol, 512, bg_color=bg_color, rounded=True, padding_percent=0.18)
     master_512.save(os.path.join(public_dir, 'icon-512.png'))
     master_512.save(os.path.join(public_dir, 'android-chrome-512x512.png'))
     
     # Create 192x192
-    master_192 = create_square_icon(white_symbol, 192, bg_color='#0F291E', rounded=True, padding_percent=0.18)
+    master_192 = create_square_icon(symbol, 192, bg_color=bg_color, rounded=True, padding_percent=0.18)
     master_192.save(os.path.join(public_dir, 'icon-192.png'))
     master_192.save(os.path.join(public_dir, 'android-chrome-192x192.png'))
     
     # Create Apple Touch Icon (180x180)
-    apple_180 = create_square_icon(white_symbol, 180, bg_color='#0F291E', rounded=False, padding_percent=0.18)
+    apple_180 = create_square_icon(symbol, 180, bg_color=bg_color, rounded=False, padding_percent=0.18)
     apple_180.save(os.path.join(public_dir, 'apple-touch-icon.png'))
     apple_180.save(os.path.join(app_dir, 'apple-icon.png'))
     
     # Create 32x32 Favicon PNG
-    fav_32 = create_square_icon(white_symbol, 32, bg_color='#0F291E', rounded=True, padding_percent=0.15)
+    fav_32 = create_square_icon(symbol, 32, bg_color=bg_color, rounded=True, padding_percent=0.12)
     fav_32.save(os.path.join(public_dir, 'favicon-32x32.png'))
     fav_32.save(os.path.join(public_dir, 'favicon.png'))
     fav_32.save(os.path.join(app_dir, 'icon.png'))
     
     # Create 16x16 Favicon PNG
-    fav_16 = create_square_icon(white_symbol, 16, bg_color='#0F291E', rounded=True, padding_percent=0.12)
+    fav_16 = create_square_icon(symbol, 16, bg_color=bg_color, rounded=True, padding_percent=0.10)
     fav_16.save(os.path.join(public_dir, 'favicon-16x16.png'))
     
     # Save ICO
@@ -130,22 +119,22 @@ def main():
             os.makedirs(folder_path, exist_ok=True)
             
         # Standard launcher (rounded square)
-        sq_icon = create_square_icon(white_symbol, ic_size, bg_color='#0F291E', rounded=True, padding_percent=0.18)
+        sq_icon = create_square_icon(symbol, ic_size, bg_color=bg_color, rounded=True, padding_percent=0.18)
         sq_icon.save(os.path.join(folder_path, 'ic_launcher.png'))
         
         # Round launcher (circular)
-        rd_icon = create_round_icon(white_symbol, ic_size, bg_color='#0F291E', padding_percent=0.18)
+        rd_icon = create_round_icon(symbol, ic_size, bg_color=bg_color, padding_percent=0.18)
         rd_icon.save(os.path.join(folder_path, 'ic_launcher_round.png'))
         
         # Foreground launcher (transparent background)
         fg_icon = Image.new('RGBA', (fg_size, fg_size), (0, 0, 0, 0))
         target_max = int(fg_size * 0.55)
-        sym_w, sym_h = white_symbol.size
+        sym_w, sym_h = symbol.size
         ratio = min(target_max / sym_w, target_max / sym_h)
         new_w = max(1, int(sym_w * ratio))
         new_h = max(1, int(sym_h * ratio))
         resample_filter = getattr(Image, 'Resampling', Image).LANCZOS
-        sym_res = white_symbol.resize((new_w, new_h), resample_filter)
+        sym_res = symbol.resize((new_w, new_h), resample_filter)
         fg_icon.paste(sym_res, ((fg_size - new_w) // 2, (fg_size - new_h) // 2), sym_res)
         fg_icon.save(os.path.join(folder_path, 'ic_launcher_foreground.png'))
         
