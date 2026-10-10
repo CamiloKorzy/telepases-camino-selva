@@ -429,13 +429,13 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           </div>
         </div>
 
-        {/* 2. ASIGNACIÓN DE PATENTES / DOMINIOS POR VEHÍCULO */}
+        {/* 2. ASIGNACIÓN DE PATENTES / DOMINIOS Y TITULAR POR VEHÍCULO */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Hash className="w-4 h-4 text-cs-primary" />
               <span className="font-bold text-xs uppercase tracking-wider text-slate-800">
-                2. ASIGNACIÓN DE PATENTES / DOMINIOS Y TITULAR POR VEHÍCULO
+                2. ASIGNACIÓN DE PATENTES / DOMINIOS Y TITULAR
               </span>
             </div>
 
@@ -448,7 +448,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                   title="Replicar DNI/CUIT y Nombre de la Fila 1 a todas las demás filas"
                 >
                   <Copy className="w-3.5 h-3.5 text-cs-primary" />
-                  <span>Replicar DNI y Nombre (Fila 1 ➔ Todas)</span>
+                  <span className="hidden sm:inline">Replicar DNI y Nombre (Fila 1 ➔ Todas)</span>
+                  <span className="sm:hidden text-[10px]">Replicar Fila 1</span>
                 </button>
               )}
 
@@ -458,7 +459,113 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
             </div>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
+          {/* VISTA MOBILE (< md): TARJETAS APILADAS Y LEGIBLES POR VEHÍCULO */}
+          <div className="block md:hidden space-y-3">
+            {rows.map((row, idx) => {
+              const val = validateTagDelivery(station, row.tagSerial);
+
+              return (
+                <div key={row.id} className="p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200/90 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-6 h-6 rounded-full bg-cs-primary text-white text-xs font-black flex items-center justify-center">
+                        {idx + 1}
+                      </span>
+                      <span className="font-mono font-extrabold text-xs text-slate-900">
+                        TAG: {row.tagSerial}
+                      </span>
+                    </div>
+
+                    {val.valid ? (
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-300 inline-flex items-center space-x-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        <span>Disponible</span>
+                      </span>
+                    ) : (
+                      <span className="bg-rose-100 text-rose-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-rose-300 inline-flex items-center space-x-1">
+                        <AlertCircle className="w-3 h-3 text-rose-600" />
+                        <span>No Disponible</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-cs-primary uppercase mb-1">
+                      Dominio / Patente *
+                    </label>
+                    <input
+                      type="text"
+                      value={row.dominio}
+                      onChange={(e) => handleRowChange(row.id, 'dominio', e.target.value)}
+                      placeholder="ej. AA123CD"
+                      className={`w-full p-3 rounded-xl font-mono font-black text-base uppercase tracking-wider focus:ring-2 focus:ring-cs-primary focus:outline-none border shadow-2xs ${
+                        !row.dominio.trim()
+                          ? 'bg-rose-50/70 border-rose-300 text-rose-900 placeholder:text-rose-400'
+                          : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                        DNI / CUIT *
+                      </label>
+                      {idx === 0 && rows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={handleReplicateDni}
+                          className="text-[10px] text-cs-primary hover:underline font-extrabold flex items-center space-x-0.5"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Replicar DNI</span>
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={row.dniCuit}
+                      onChange={(e) => handleRowChange(row.id, 'dniCuit', e.target.value.replace(/\D/g, ''))}
+                      placeholder="ej. 30712345678"
+                      className={`w-full p-2.5 rounded-xl font-mono font-bold text-sm focus:ring-2 focus:ring-cs-primary focus:outline-none border ${
+                        !row.dniCuit.trim()
+                          ? 'bg-rose-50/70 border-rose-300 text-rose-900 placeholder:text-rose-400'
+                          : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                        Nombre / Razón Social
+                      </label>
+                      {idx === 0 && rows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={handleReplicateNombre}
+                          className="text-[10px] text-cs-primary hover:underline font-extrabold flex items-center space-x-0.5"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>Replicar Nombre</span>
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={row.nombre}
+                      onChange={(e) => handleRowChange(row.id, 'nombre', e.target.value)}
+                      placeholder="ej. Juan Pérez / Empresa S.R.L."
+                      className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* VISTA DESKTOP (>= md): TABLA HORIZONTAL DE ALTAS */}
+          <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full text-xs text-left text-slate-700">
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
                 <tr>
@@ -579,7 +686,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           <button
             type="submit"
             disabled={loading || !isFormValid}
-            className={`w-full py-3.5 px-6 rounded-xl text-xs font-extrabold tracking-wider uppercase shadow-sm transition flex items-center justify-center space-x-2 ${
+            className={`w-full py-4 px-6 rounded-xl text-xs sm:text-sm font-black tracking-wider uppercase shadow-md transition flex items-center justify-center space-x-2 ${
               isFormValid && !loading
                 ? 'bg-cs-primary hover:bg-emerald-950 text-white cursor-pointer'
                 : 'bg-slate-300 text-slate-500 cursor-not-allowed border border-slate-300'
@@ -587,12 +694,12 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           >
             {loading ? (
               <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
+                <RefreshCw className="w-5 h-5 animate-spin" />
                 <span>REGISTRANDO ENTREGA...</span>
               </>
             ) : (
               <>
-                <Truck className="w-4 h-4 text-emerald-300" />
+                <Truck className="w-5 h-5 text-emerald-300" />
                 <span>
                   {rows.length === 1
                     ? '🚚 REGISTRAR ENTREGA DE 1 TAG'
