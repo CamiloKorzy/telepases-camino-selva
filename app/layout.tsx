@@ -2,13 +2,23 @@ import './globals.css';
 import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Registro de Entregas DE TAGs TelePASE - Camino Selva S.A.',
-  description: 'Aplicación Web & PWA para control de entregas de TAGs TelePASE en estaciones de peaje con escáner de cámara.',
+  title: 'TelePASE - Camino Selva S.A.',
+  description: 'Plataforma Oficial de Control y Registro de Entregas de TAGs TelePASE - Camino Selva S.A.',
   manifest: '/manifest.json',
+  icons: {
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'TelePASE TAGs',
+    title: 'TelePASE Camino Selva',
   },
 };
 
