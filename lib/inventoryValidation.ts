@@ -25,12 +25,10 @@ export function getAllBatches(): TagBatch[] {
     }
   }
 
-  const isOldSeed = localBatches.some(
-    (b) => b && (b.serial_desde === '63226500' || b.cantidad === 500 || b.cantidad === 501)
-  );
-  const hasRealBatches = localBatches.some((b) => b && b.serial_desde === '63228500');
+  const totalQuantity = localBatches.reduce((acc, b) => acc + (Number(b.cantidad) || 0), 0);
+  const isComplete20k = localBatches.length >= 14 && totalQuantity >= 20000;
 
-  if (localBatches.length === 0 || isOldSeed || !hasRealBatches) {
+  if (localBatches.length === 0 || !isComplete20k) {
     localBatches = DEFAULT_BATCHES;
     if (typeof window !== 'undefined') {
       try {

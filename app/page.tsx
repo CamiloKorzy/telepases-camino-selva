@@ -171,12 +171,10 @@ export default function AntigravityDashboard() {
       } catch {}
     }
 
-    const isOldSeedBatches = localBatches.some(
-      (b) => b && (b.serial_desde === '63226500' || b.cantidad === 500 || b.cantidad === 501)
-    );
-    const hasRealBatches = localBatches.some((b) => b && b.serial_desde === '63228500');
+    const totalBatchQty = localBatches.reduce((acc, b) => acc + (Number(b?.cantidad) || 0), 0);
+    const isComplete20kBatches = localBatches.length >= 14 && totalBatchQty >= 20000;
 
-    if (localBatches.length === 0 || isOldSeedBatches || !hasRealBatches) {
+    if (localBatches.length === 0 || !isComplete20kBatches) {
       localBatches = DEFAULT_BATCHES;
       try {
         localStorage.setItem('telepase_local_tag_batches', JSON.stringify(localBatches));
@@ -190,12 +188,10 @@ export default function AntigravityDashboard() {
       } catch {}
     }
 
-    const isOldSeedTransfers = localTransfers.some(
-      (t) => t && (t.serial_desde === '63226500' || t.cantidad === 500 || t.cantidad === 501)
-    );
-    const hasRealTransfers = localTransfers.some((t) => t && t.serial_desde === '63228500');
+    const totalTransfQty = localTransfers.reduce((acc, t) => acc + (Number(t?.cantidad) || 0), 0);
+    const isCompleteTransfers = localTransfers.length >= 4 && totalTransfQty >= 6000;
 
-    if (localTransfers.length === 0 || isOldSeedTransfers || !hasRealTransfers) {
+    if (localTransfers.length === 0 || !isCompleteTransfers) {
       localTransfers = DEFAULT_TRANSFERS;
       try {
         localStorage.setItem('telepase_local_tag_transfers', JSON.stringify(localTransfers));
