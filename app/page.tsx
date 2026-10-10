@@ -1104,7 +1104,7 @@ export default function AntigravityDashboard() {
             <div className="space-y-6">
               {/* Formulario con usuario autenticado (Oculto para Rol Consulta) */}
               {userSession.rol !== 'Consulta' && (
-                <div className="w-full">
+                <div id="formulario-entrega-section" className="w-full">
                   <DeliveryForm currentUser={userSession} onDeliverySuccess={fetchData} />
                 </div>
               )}
