@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagDelivery, UserSession, TagBatch } from '@/types/database';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
-import { validateTagDelivery, validateTagDeliveryAsync } from '@/lib/inventoryValidation';
+import { validateTagDelivery, validateTagDeliveryAsync, refreshInventoryCache } from '@/lib/inventoryValidation';
 import { CheckCircle2, AlertCircle, Save, Car, User, Users, Truck, Copy, Plus, RefreshCw, Hash } from 'lucide-react';
 
 interface DeliveryFormProps {
@@ -57,6 +57,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
   useEffect(() => {
     const loadPoints = async () => {
+      refreshInventoryCache();
       const masterList = await getMasterDeliveryPoints();
       const names = masterList.map((p) => p.estacion);
       setDeliveryPoints(names);
@@ -156,6 +157,15 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     setBulkRows((prev) => prev.map((r) => ({ ...r, nombre: sharedNombre.trim() })));
   };
 
+  // Validaciones en tiempo real para modo individual y masivo
+  const singleTagValidation = formData.tag_serial.trim()
+    ? validateTagDelivery(formData.estacion, formData.tag_serial)
+    : null;
+
+  const bulkInvalidRowsCount = bulkRows.filter(
+    (r) => r.tagSerial.trim() && !validateTagDelivery(bulkStation, r.tagSerial).valid
+  ).length;
+
   const handleSubmitIndividual = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -240,7 +250,10 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       return;
     }
 
-    // Validar cada fila
+    // Refrescar caché de inventario antes de guardar
+    await refreshInventoryCache();
+
+    // Validar cada fila estrictamente
     const serialSet = new Set<string>();
     const payloads: TagDelivery[] = [];
     const timestamp = new Date().toISOString();
@@ -451,9 +464,32 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                   value={formData.tag_serial}
                   onChange={handleChange}
                   placeholder="Ingresar número de serie TAG RFID"
-                  className="w-full p-3 rounded-xl border-2 border-cs-primary/60 font-mono font-bold text-cs-dark tracking-wider bg-cs-primary/5 focus:ring-2 focus:ring-cs-primary focus:outline-none uppercase"
+                  className={`w-full p-3 rounded-xl border-2 font-mono font-bold tracking-wider bg-cs-primary/5 focus:ring-2 focus:outline-none uppercase ${
+                    singleTagValidation
+                      ? singleTagValidation.valid
+                        ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500'
+                        : 'border-rose-500 text-rose-950 focus:ring-rose-500'
+                      : 'border-cs-primary/60 text-cs-dark focus:ring-cs-primary'
+                  }`}
                   required
                 />
+                {singleTagValidation && (
+                  <div className={`text-[11px] font-bold mt-1.5 flex items-start space-x-1 ${
+                    singleTagValidation.valid ? 'text-emerald-700' : 'text-rose-700'
+                  }`}>
+                    {singleTagValidation.valid ? (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                        <span>TAG disponible en stock de {formData.estacion}</span>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0 mt-0.5" />
+                        <span>{singleTagValidation.error}</span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Dominio / Patente (OBLIGATORIO) */}
@@ -515,7 +551,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
             {/* Botón de Envío */}
             <button
               type="submit"
-              disabled={loading || currentUser.rol === 'Consulta'}
+              disabled={loading || currentUser.rol === 'Consulta' || (singleTagValidation !== null && !singleTagValidation.valid)}
               className="w-full py-4 bg-cs-primary hover:bg-cs-dark active:bg-cs-dark/90 text-white font-bold text-base rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50"
             >
               <Save className="w-5 h-5" />
@@ -571,9 +607,32 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                     value={startSerial}
                     onChange={(e) => setStartSerial(e.target.value)}
                     placeholder="ej. 63228500"
-                    className="w-full p-2.5 rounded-xl border-2 border-emerald-400 font-mono font-bold text-xs bg-white uppercase text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className={`w-full p-2.5 rounded-xl border-2 font-mono font-bold text-xs bg-white uppercase focus:ring-2 focus:outline-none ${
+                      startSerial.trim()
+                        ? bulkInvalidRowsCount === 0
+                          ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500'
+                          : 'border-rose-500 text-rose-950 focus:ring-rose-500'
+                        : 'border-emerald-400 text-emerald-950 focus:ring-emerald-500'
+                    }`}
                     required
                   />
+                  {startSerial.trim() && (
+                    <div className={`text-[10px] font-bold mt-1 flex items-center space-x-1 ${
+                      bulkInvalidRowsCount === 0 ? 'text-emerald-700' : 'text-rose-700'
+                    }`}>
+                      {bulkInvalidRowsCount === 0 ? (
+                        <>
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+                          <span>Serie en stock ({bulkRows.length} TAGs OK)</span>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="w-3 h-3 text-rose-600 flex-shrink-0" />
+                          <span>⛔ {bulkInvalidRowsCount} de {bulkRows.length} TAGs sin stock en {bulkStation}</span>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Cantidad de TAGs */}
@@ -670,64 +729,97 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                   Ingrese el <b>Primer Nº Serie TAG</b> y la <b>Cantidad de TAGs</b> arriba para desplegar la grilla de asignación de patentes.
                 </div>
               ) : (
-                <div className="max-h-[300px] overflow-y-auto border border-slate-200 rounded-xl shadow-inner">
+                <div className="max-h-[320px] overflow-y-auto border border-slate-200 rounded-xl shadow-inner">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className="bg-slate-100 text-slate-700 sticky top-0 z-10 font-bold border-b border-slate-200">
                       <tr>
-                        <th className="p-2.5 text-center w-12">#</th>
+                        <th className="p-2.5 text-center w-10">#</th>
                         <th className="p-2.5">TAG Serial *</th>
+                        <th className="p-2.5">Estado Stock</th>
                         <th className="p-2.5">Dominio / Patente *</th>
                         <th className="p-2.5">DNI / CUIT *</th>
                         <th className="p-2.5">Razón Social / Receptor</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white">
-                      {bulkRows.map((row, idx) => (
-                        <tr key={row.id} className="hover:bg-emerald-50/30 transition">
-                          <td className="p-2.5 text-center font-mono font-extrabold text-slate-400">
-                            {idx + 1}
-                          </td>
-                          <td className="p-2.5 font-mono font-bold text-cs-primary">
-                            <input
-                              type="text"
-                              value={row.tagSerial}
-                              onChange={(e) => handleBulkRowChange(row.id, 'tagSerial', e.target.value)}
-                              className="w-full p-1.5 rounded-lg border border-slate-300 font-mono font-bold text-xs uppercase focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                              required
-                            />
-                          </td>
-                          <td className="p-2.5">
-                            <input
-                              type="text"
-                              value={row.dominio}
-                              onChange={(e) => handleBulkRowChange(row.id, 'dominio', e.target.value)}
-                              placeholder="AA123CD"
-                              maxLength={8}
-                              className="w-full p-1.5 rounded-lg border-2 border-cs-primary/50 font-mono font-bold text-slate-900 text-xs uppercase bg-cs-primary/5 focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                              required
-                            />
-                          </td>
-                          <td className="p-2.5">
-                            <input
-                              type="text"
-                              value={row.dniCuit}
-                              onChange={(e) => handleBulkRowChange(row.id, 'dniCuit', e.target.value)}
-                              placeholder="30712345678"
-                              className="w-full p-1.5 rounded-lg border border-slate-300 font-medium text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                              required
-                            />
-                          </td>
-                          <td className="p-2.5">
-                            <input
-                              type="text"
-                              value={row.nombre}
-                              onChange={(e) => handleBulkRowChange(row.id, 'nombre', e.target.value)}
-                              placeholder="Transportes S.R.L."
-                              className="w-full p-1.5 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                            />
-                          </td>
-                        </tr>
-                      ))}
+                      {bulkRows.map((row, idx) => {
+                        const rowVal = row.tagSerial.trim()
+                          ? validateTagDelivery(bulkStation, row.tagSerial)
+                          : null;
+
+                        return (
+                          <tr key={row.id} className={`transition ${rowVal && !rowVal.valid ? 'bg-rose-50/40' : 'hover:bg-emerald-50/30'}`}>
+                            <td className="p-2.5 text-center font-mono font-extrabold text-slate-400">
+                              {idx + 1}
+                            </td>
+                            <td className="p-2.5 font-mono font-bold text-cs-primary">
+                              <input
+                                type="text"
+                                value={row.tagSerial}
+                                onChange={(e) => handleBulkRowChange(row.id, 'tagSerial', e.target.value)}
+                                className={`w-full p-1.5 rounded-lg border font-mono font-bold text-xs uppercase focus:ring-2 focus:outline-none ${
+                                  rowVal
+                                    ? rowVal.valid
+                                      ? 'border-slate-300 text-slate-900 focus:ring-emerald-500'
+                                      : 'border-rose-400 text-rose-900 bg-rose-50 focus:ring-rose-500'
+                                    : 'border-slate-300 text-slate-900'
+                                }`}
+                                required
+                              />
+                            </td>
+                            <td className="p-2.5 whitespace-nowrap">
+                              {rowVal ? (
+                                rowVal.valid ? (
+                                  <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-200">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    <span>OK</span>
+                                  </span>
+                                ) : (
+                                  <span
+                                    title={rowVal.error}
+                                    className="inline-flex items-center space-x-1 text-[10px] font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded-md border border-rose-200 cursor-help"
+                                  >
+                                    <AlertCircle className="w-3 h-3 text-rose-600" />
+                                    <span>Sin Stock</span>
+                                  </span>
+                                )
+                              ) : (
+                                <span className="text-[10px] text-slate-400 font-medium">-</span>
+                              )}
+                            </td>
+                            <td className="p-2.5">
+                              <input
+                                type="text"
+                                value={row.dominio}
+                                onChange={(e) => handleBulkRowChange(row.id, 'dominio', e.target.value)}
+                                placeholder="AA123CD"
+                                maxLength={8}
+                                className="w-full p-1.5 rounded-lg border-2 border-cs-primary/50 font-mono font-bold text-slate-900 text-xs uppercase bg-cs-primary/5 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                                required
+                              />
+                            </td>
+                            <td className="p-2.5">
+                              <input
+                                type="text"
+                                value={row.dniCuit}
+                                onChange={(e) => handleBulkRowChange(row.id, 'dniCuit', e.target.value)}
+                                placeholder="30712345678"
+                                className="w-full p-1.5 rounded-lg border border-slate-300 font-medium text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                                required
+                              />
+                            </td>
+                            <td className="p-2.5">
+                              <input
+                                type="text"
+                                value={row.nombre}
+                                onChange={(e) => handleBulkRowChange(row.id, 'nombre', e.target.value)}
+                                placeholder="Transportes S.R.L."
+                                className="w-full p-1.5 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -737,7 +829,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
             {/* Botón de Guardar Entrega Masiva */}
             <button
               type="submit"
-              disabled={loading || currentUser.rol === 'Consulta' || bulkRows.length === 0}
+              disabled={loading || currentUser.rol === 'Consulta' || bulkRows.length === 0 || bulkInvalidRowsCount > 0}
               className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-sm rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 uppercase tracking-wider"
             >
               <Truck className="w-5 h-5" />
