@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { TagDelivery, UserSession, TagBatch } from '@/types/database';
 import { getMasterDeliveryPoints, fixUserName } from '@/lib/deliveryPoints';
 import { validateTagDelivery, validateTagDeliveryAsync, refreshInventoryCache } from '@/lib/inventoryValidation';
-import { CheckCircle2, AlertCircle, Save, Car, User, Users, Truck, Copy, Plus, RefreshCw, Hash } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Save, Car, User, Users, Truck, Copy, Plus, RefreshCw, Hash, Mail, Phone } from 'lucide-react';
 
 interface DeliveryFormProps {
   currentUser: UserSession;
@@ -18,6 +18,8 @@ interface BulkDeliveryRow {
   dominio: string;
   dniCuit: string;
   nombre: string;
+  emailContacto?: string;
+  celularContacto?: string;
 }
 
 export default function DeliveryForm({ currentUser, onDeliverySuccess }: DeliveryFormProps) {
@@ -37,6 +39,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     tag_serial: '',
     operador_runner: currentUser.nombre || currentUser.email,
     observaciones: '',
+    email_contacto: '',
+    celular_contacto: '',
   });
 
   // Formulario Masivo (Flotas / Empresas)
@@ -45,6 +49,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
   const [bulkQuantity, setBulkQuantity] = useState<number>(5);
   const [sharedDniCuit, setSharedDniCuit] = useState<string>('');
   const [sharedNombre, setSharedNombre] = useState<string>('');
+  const [sharedEmail, setSharedEmail] = useState<string>('');
+  const [sharedCelular, setSharedCelular] = useState<string>('');
   const [bulkObservaciones, setBulkObservaciones] = useState<string>('');
   const [bulkRows, setBulkRows] = useState<BulkDeliveryRow[]>([]);
 
@@ -98,6 +104,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           dominio: bulkRows[i]?.dominio || '',
           dniCuit: bulkRows[i]?.dniCuit || sharedDniCuit,
           nombre: bulkRows[i]?.nombre || sharedNombre,
+          emailContacto: bulkRows[i]?.emailContacto || sharedEmail,
+          celularContacto: bulkRows[i]?.celularContacto || sharedCelular,
         }))
       );
       return;
@@ -127,6 +135,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           dominio: bulkRows[existingIdx]?.dominio || '',
           dniCuit: bulkRows[existingIdx]?.dniCuit || sharedDniCuit,
           nombre: bulkRows[existingIdx]?.nombre || sharedNombre,
+          emailContacto: bulkRows[existingIdx]?.emailContacto || sharedEmail,
+          celularContacto: bulkRows[existingIdx]?.celularContacto || sharedCelular,
         });
         foundCount++;
       }
@@ -145,6 +155,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           dominio: bulkRows[i]?.dominio || '',
           dniCuit: bulkRows[i]?.dniCuit || sharedDniCuit,
           nombre: bulkRows[i]?.nombre || sharedNombre,
+          emailContacto: bulkRows[i]?.emailContacto || sharedEmail,
+          celularContacto: bulkRows[i]?.celularContacto || sharedCelular,
         });
       }
     }
@@ -189,35 +201,39 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     setBulkRows((prev) => prev.map((r) => ({ ...r, nombre: targetNombre })));
   };
 
-  const replicateDniCuitAndNombre = () => {
-    const targetDni = sharedDniCuit.trim() || (bulkRows[0]?.dniCuit.trim() || '');
-    const targetNombre = sharedNombre.trim() || (bulkRows[0]?.nombre.trim() || '');
+  const replicateEmail = () => {
+    const targetEmail = sharedEmail.trim() || (bulkRows[0]?.emailContacto?.trim() || '');
+    if (!targetEmail) return;
+    setSharedEmail(targetEmail);
+    setBulkRows((prev) => prev.map((r) => ({ ...r, emailContacto: targetEmail })));
+  };
 
-    if (targetDni) setSharedDniCuit(targetDni);
-    if (targetNombre) setSharedNombre(targetNombre);
-
-    setBulkRows((prev) =>
-      prev.map((r) => ({
-        ...r,
-        dniCuit: targetDni || r.dniCuit,
-        nombre: targetNombre || r.nombre,
-      }))
-    );
+  const replicateCelular = () => {
+    const targetCelular = sharedCelular.trim() || (bulkRows[0]?.celularContacto?.trim() || '');
+    if (!targetCelular) return;
+    setSharedCelular(targetCelular);
+    setBulkRows((prev) => prev.map((r) => ({ ...r, celularContacto: targetCelular })));
   };
 
   const replicateFromFirstRow = () => {
     if (bulkRows.length === 0) return;
     const firstDni = bulkRows[0].dniCuit.trim() || sharedDniCuit.trim();
     const firstNombre = bulkRows[0].nombre.trim() || sharedNombre.trim();
+    const firstEmail = bulkRows[0].emailContacto?.trim() || sharedEmail.trim();
+    const firstCelular = bulkRows[0].celularContacto?.trim() || sharedCelular.trim();
 
     if (firstDni) setSharedDniCuit(firstDni);
     if (firstNombre) setSharedNombre(firstNombre);
+    if (firstEmail) setSharedEmail(firstEmail);
+    if (firstCelular) setSharedCelular(firstCelular);
 
     setBulkRows((prev) =>
       prev.map((r) => ({
         ...r,
         dniCuit: firstDni || r.dniCuit,
         nombre: firstNombre || r.nombre,
+        emailContacto: firstEmail || r.emailContacto,
+        celularContacto: firstCelular || r.celularContacto,
       }))
     );
   };
@@ -328,6 +344,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       dominio: '',
       tag_serial: '',
       observaciones: '',
+      email_contacto: '',
+      celular_contacto: '',
     }));
 
     setLoading(false);
@@ -348,7 +366,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     // Refrescar caché de inventario antes de guardar
     await refreshInventoryCache();
 
-    // Validar cada fila estrictamente
+    // Validar cada fila strictly
     const serialSet = new Set<string>();
     const payloads: TagDelivery[] = [];
     const timestamp = new Date().toISOString();
@@ -359,6 +377,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       const domClean = row.dominio.trim().toUpperCase().replace(/\s/g, '');
       const dniClean = (row.dniCuit || sharedDniCuit).trim();
       const nomClean = (row.nombre || sharedNombre).trim();
+      const emailClean = (row.emailContacto || sharedEmail).trim();
+      const celClean = (row.celularContacto || sharedCelular).trim();
 
       if (!serialClean) {
         setMessage({ type: 'error', text: `Fila #${i + 1}: Debe especificar el número de TAG.` });
@@ -401,6 +421,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
         dominio: domClean,
         dni_cuit: dniClean,
         nombre_apellido: nomClean,
+        email_contacto: emailClean,
+        celular_contacto: celClean,
         operador_runner: currentUser.nombre || currentUser.email,
         observaciones: bulkObservaciones.trim(),
       });
@@ -429,6 +451,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     setBulkQuantity(5);
     setSharedDniCuit('');
     setSharedNombre('');
+    setSharedEmail('');
+    setSharedCelular('');
     setBulkObservaciones('');
     setBulkRows([]);
 
@@ -623,11 +647,44 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
               <input
                 type="text"
                 name="nombre_apellido"
-                value={formData.nombre_apellido}
+                value={formData.nombre_apellido || ''}
                 onChange={handleChange}
                 placeholder="Juan Pérez"
                 className="w-full p-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-cs-primary focus:outline-none"
               />
+            </div>
+
+            {/* Email y Celular de Contacto (Opcionales - Para envío de Folleto / Activación) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100">
+              <div>
+                <label className="block text-[11px] font-bold text-sky-900 uppercase mb-1 flex items-center space-x-1">
+                  <Mail className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Email de Contacto (Opcional - Envío Folleto)</span>
+                </label>
+                <input
+                  type="email"
+                  name="email_contacto"
+                  value={formData.email_contacto || ''}
+                  onChange={handleChange}
+                  placeholder="ej. cliente@email.com"
+                  className="w-full p-2.5 rounded-xl border border-sky-200 bg-white text-xs text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-sky-900 uppercase mb-1 flex items-center space-x-1">
+                  <Phone className="w-3.5 h-3.5 text-sky-600" />
+                  <span>Celular / WhatsApp (Opcional - Activación)</span>
+                </label>
+                <input
+                  type="tel"
+                  name="celular_contacto"
+                  value={formData.celular_contacto || ''}
+                  onChange={handleChange}
+                  placeholder="ej. 3764123456"
+                  className="w-full p-2.5 rounded-xl border border-sky-200 bg-white text-xs text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                />
+              </div>
             </div>
 
             {/* Observaciones */}
@@ -769,7 +826,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {/* Nombre Empresa */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -793,17 +850,68 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                   />
                 </div>
 
-                {/* Observaciones */}
+                {/* Email Empresa */}
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Observaciones Comunes (Opcional)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-sky-900 uppercase flex items-center space-x-1">
+                      <Mail className="w-3 h-3 text-sky-600" />
+                      <span>Email Contacto (Opcional)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={replicateEmail}
+                      className="text-[10px] text-sky-700 font-bold hover:underline flex items-center space-x-0.5"
+                      title="Replicar Email a todos los registros"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Replicar</span>
+                    </button>
+                  </div>
                   <input
-                    type="text"
-                    value={bulkObservaciones}
-                    onChange={(e) => setBulkObservaciones(e.target.value)}
-                    placeholder="ej. Entrega de flota colectivos transporte urbano"
-                    className="w-full p-2.5 rounded-xl border border-slate-300 text-xs bg-white text-slate-900"
+                    type="email"
+                    value={sharedEmail}
+                    onChange={(e) => setSharedEmail(e.target.value)}
+                    placeholder="ej. flota@empresa.com"
+                    className="w-full p-2.5 rounded-xl border border-sky-200 font-medium text-xs bg-white text-slate-900"
                   />
                 </div>
+
+                {/* Celular Empresa */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-sky-900 uppercase flex items-center space-x-1">
+                      <Phone className="w-3 h-3 text-sky-600" />
+                      <span>Celular / WhatsApp (Opcional)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={replicateCelular}
+                      className="text-[10px] text-sky-700 font-bold hover:underline flex items-center space-x-0.5"
+                      title="Replicar Celular a todos los registros"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Replicar</span>
+                    </button>
+                  </div>
+                  <input
+                    type="tel"
+                    value={sharedCelular}
+                    onChange={(e) => setSharedCelular(e.target.value)}
+                    placeholder="ej. 3764123456"
+                    className="w-full p-2.5 rounded-xl border border-sky-200 font-medium text-xs bg-white text-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Observaciones Comunes (Opcional)</label>
+                <input
+                  type="text"
+                  value={bulkObservaciones}
+                  onChange={(e) => setBulkObservaciones(e.target.value)}
+                  placeholder="ej. Entrega de flota colectivos transporte urbano"
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs bg-white text-slate-900"
+                />
               </div>
             </div>
 

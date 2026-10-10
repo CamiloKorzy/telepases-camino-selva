@@ -8,6 +8,8 @@ export interface TagDelivery {
   tag_serial: string;
   operador_runner: string;
   observaciones?: string;
+  email_contacto?: string;
+  celular_contacto?: string;
   sincronizado_glm?: boolean;
   fecha_cruce_glm?: string;
 }

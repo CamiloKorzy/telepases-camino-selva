@@ -12,7 +12,7 @@ import DeliveryPointManagement from '@/components/DeliveryPointManagement';
 import TransferManagement from '@/components/TransferManagement';
 import ScheduledReportModal from '@/components/ScheduledReportModal';
 import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName } from '@/lib/deliveryPoints';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, BarChart3, Calendar } from 'lucide-react';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 
 export default function AntigravityDashboard() {
@@ -39,6 +39,8 @@ export default function AntigravityDashboard() {
   const [editDniCuit, setEditDniCuit] = useState('');
   const [editNombreReceptor, setEditNombreReceptor] = useState('');
   const [editObservaciones, setEditObservaciones] = useState('');
+  const [editEmailContacto, setEditEmailContacto] = useState('');
+  const [editCelularContacto, setEditCelularContacto] = useState('');
 
   // Cargar sesión al iniciar y escuchar actualizaciones
   const syncSession = () => {
@@ -281,6 +283,7 @@ export default function AntigravityDashboard() {
   };
 
   const handleStartEditDelivery = (item: TagDelivery) => {
+    if (userSession?.rol !== 'Administrador') return;
     setEditingDelivery(item);
     setEditEstacion(item.estacion);
     setEditDominio(item.dominio);
@@ -288,11 +291,13 @@ export default function AntigravityDashboard() {
     setEditDniCuit(item.dni_cuit);
     setEditNombreReceptor(item.nombre_apellido || '');
     setEditObservaciones(item.observaciones || '');
+    setEditEmailContacto(item.email_contacto || '');
+    setEditCelularContacto(item.celular_contacto || '');
   };
 
   const handleUpdateDelivery = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingDelivery) return;
+    if (!editingDelivery || userSession?.rol !== 'Administrador') return;
 
     const updatedPayload: TagDelivery = {
       ...editingDelivery,
@@ -302,6 +307,8 @@ export default function AntigravityDashboard() {
       dni_cuit: editDniCuit.trim(),
       nombre_apellido: editNombreReceptor.trim(),
       observaciones: editObservaciones.trim(),
+      email_contacto: editEmailContacto.trim(),
+      celular_contacto: editCelularContacto.trim(),
     };
 
     try {
@@ -340,6 +347,7 @@ export default function AntigravityDashboard() {
   });
 
   const handleDeleteDelivery = (item: TagDelivery) => {
+    if (userSession?.rol !== 'Administrador') return;
     setConfirmModalState({
       isOpen: true,
       title: 'Eliminar Entrega de TAG',
@@ -459,6 +467,8 @@ export default function AntigravityDashboard() {
       'Nº Serie TAG RFID': d.tag_serial,
       'DNI / CUIT': d.dni_cuit,
       'Nombre Receptor': d.nombre_apellido || 'N/A',
+      'Email Contacto (Folleto)': d.email_contacto || '-',
+      'Celular Contacto (SMS/WhatsApp)': d.celular_contacto || '-',
       'Usuario Registrador': d.operador_runner,
       'Observaciones': d.observaciones || '',
       'Sincronizado GLM': d.sincronizado_glm ? 'SÍ' : 'NO',
@@ -476,6 +486,8 @@ export default function AntigravityDashboard() {
       { wch: 16 },
       { wch: 14 },
       { wch: 24 },
+      { wch: 26 },
+      { wch: 22 },
       { wch: 22 },
       { wch: 30 },
       { wch: 15 },
@@ -487,9 +499,9 @@ export default function AntigravityDashboard() {
 
   // Exportar a CSV
   const exportToCSV = () => {
-    const headers = 'ID,Fecha_Hora,Punto_de_Entrega,Dominio,TAG_Serial,DNI_CUIT,Nombre_Apellido,Usuario_Operador,Observaciones\n';
+    const headers = 'ID,Fecha_Hora,Punto_de_Entrega,Dominio,TAG_Serial,DNI_CUIT,Nombre_Apellido,Email_Contacto,Celular_Contacto,Usuario_Operador,Observaciones\n';
     const rows = filteredDeliveries
-      .map((d) => `${d.id},${d.created_at},"${d.estacion}",${d.dominio},${d.tag_serial},${d.dni_cuit},"${d.nombre_apellido || ''}","${d.operador_runner}","${d.observaciones || ''}"`)
+      .map((d) => `${d.id},${d.created_at},"${d.estacion}",${d.dominio},${d.tag_serial},${d.dni_cuit},"${d.nombre_apellido || ''}","${d.email_contacto || ''}","${d.celular_contacto || ''}","${d.operador_runner}","${d.observaciones || ''}"`)
       .join('\n');
     
     const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
@@ -902,6 +914,7 @@ export default function AntigravityDashboard() {
                         <th className="p-3">TAG Serial *</th>
                         <th className="p-3">DNI / CUIT *</th>
                         <th className="p-3">Nombre Receptor</th>
+                        <th className="p-3">Contacto (Mail / Cel)</th>
                         <th className="p-3">Usuario Registrador</th>
                         <th className="p-3">Observaciones</th>
                         {isAdmin && <th className="p-3 text-center">Acciones</th>}
@@ -910,7 +923,7 @@ export default function AntigravityDashboard() {
                     <tbody className="divide-y divide-slate-200">
                       {filteredDeliveries.length === 0 ? (
                         <tr>
-                          <td colSpan={isAdmin ? 9 : 8} className="p-6 text-center text-slate-400">
+                          <td colSpan={isAdmin ? 10 : 9} className="p-6 text-center text-slate-400">
                             No se encontraron registros de entrega.
                           </td>
                         </tr>
@@ -933,6 +946,26 @@ export default function AntigravityDashboard() {
                             <td className="p-3 font-mono text-cs-primary font-bold">{item.tag_serial}</td>
                             <td className="p-3 font-semibold text-slate-800 font-mono">{item.dni_cuit}</td>
                             <td className="p-3 text-slate-700">{item.nombre_apellido || '-'}</td>
+                            <td className="p-3 text-slate-700 font-mono text-[11px]">
+                              {item.email_contacto || item.celular_contacto ? (
+                                <div className="space-y-0.5">
+                                  {item.email_contacto && (
+                                    <div className="flex items-center space-x-1 text-sky-800" title={`Email: ${item.email_contacto}`}>
+                                      <Mail className="w-3 h-3 text-sky-600 flex-shrink-0" />
+                                      <span className="truncate max-w-[130px]">{item.email_contacto}</span>
+                                    </div>
+                                  )}
+                                  {item.celular_contacto && (
+                                    <div className="flex items-center space-x-1 text-emerald-800 font-bold" title={`Celular: ${item.celular_contacto}`}>
+                                      <Phone className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+                                      <span>{item.celular_contacto}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">-</span>
+                              )}
+                            </td>
                             <td className="p-3 font-semibold text-slate-700 whitespace-nowrap bg-emerald-50/40 text-emerald-900">
                               {fixUserName(item.operador_runner)}
                             </td>
@@ -1048,6 +1081,35 @@ export default function AntigravityDashboard() {
                   onChange={(e) => setEditNombreReceptor(e.target.value)}
                   className="w-full p-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-sky-50/50 p-3 rounded-xl border border-sky-100">
+                <div>
+                  <label className="block text-[11px] font-bold text-sky-900 uppercase mb-1 flex items-center space-x-1">
+                    <Mail className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Email Contacto (Folleto)</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={editEmailContacto}
+                    onChange={(e) => setEditEmailContacto(e.target.value)}
+                    placeholder="cliente@email.com"
+                    className="w-full p-2.5 rounded-xl border border-sky-200 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-sky-900 uppercase mb-1 flex items-center space-x-1">
+                    <Phone className="w-3.5 h-3.5 text-sky-600" />
+                    <span>Celular / WhatsApp (Activación)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={editCelularContacto}
+                    onChange={(e) => setEditCelularContacto(e.target.value)}
+                    placeholder="3764123456"
+                    className="w-full p-2.5 rounded-xl border border-sky-200 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                  />
+                </div>
               </div>
 
               <div>

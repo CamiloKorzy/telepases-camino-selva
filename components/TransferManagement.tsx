@@ -492,7 +492,7 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
     !currentUser.punto_entrega ||
     currentUser.punto_entrega === 'Todos';
 
-  const isAdmin = currentUser.rol === 'Administrador' || !currentUser.punto_entrega || currentUser.punto_entrega === 'Todos';
+  const isAdmin = currentUser.rol === 'Administrador';
 
   // 1. Filtrar movimientos visibles según rol (Administradores y usuarios Consulta ven TODO)
   const userVisibleMovements = movements.filter((m) => {
