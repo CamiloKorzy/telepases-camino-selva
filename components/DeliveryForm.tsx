@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagDelivery, UserSession, TagBatch } from '@/types/database';
 import { getMasterDeliveryPoints, fixUserName } from '@/lib/deliveryPoints';
-import { validateTagDelivery, validateTagDeliveryAsync, refreshInventoryCache } from '@/lib/inventoryValidation';
-import { CheckCircle2, AlertCircle, Save, Car, User, Users, Truck, Copy, Plus, RefreshCw, Hash, Mail, Phone } from 'lucide-react';
+import { validateTagDelivery, validateTagDeliveryAsync, refreshInventoryCache, getFirstAvailableTagForStation } from '@/lib/inventoryValidation';
+import { CheckCircle2, AlertCircle, Save, Car, User, Users, Truck, Copy, Plus, RefreshCw, Hash, Mail, Phone, Zap } from 'lucide-react';
 
 interface DeliveryFormProps {
   currentUser: UserSession;
@@ -63,7 +63,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
   useEffect(() => {
     const loadPoints = async () => {
-      refreshInventoryCache();
+      await refreshInventoryCache();
       const masterList = await getMasterDeliveryPoints();
       const names = masterList.map((p) => p.estacion);
       setDeliveryPoints(names);
@@ -72,8 +72,15 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
         ? currentUser.punto_entrega
         : names[0] || 'Santa Ana';
       
-      setFormData((prev) => ({ ...prev, estacion: assignedPoint }));
+      const suggestedTag = getFirstAvailableTagForStation(assignedPoint);
+
+      setFormData((prev) => ({
+        ...prev,
+        estacion: assignedPoint,
+        tag_serial: prev.tag_serial || suggestedTag || '',
+      }));
       setBulkStation(assignedPoint);
+      setStartSerial((prev) => prev || suggestedTag || '');
     };
 
     loadPoints();
@@ -82,6 +89,21 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     window.addEventListener('delivery_points_updated', handleUpdated);
     return () => window.removeEventListener('delivery_points_updated', handleUpdated);
   }, [currentUser]);
+
+  // Auto-sugerir el primer TAG disponible en stock al cambiar de Punto de Entrega o Modo
+  useEffect(() => {
+    if (mode === 'individual') {
+      const suggested = getFirstAvailableTagForStation(formData.estacion);
+      if (suggested) {
+        setFormData((prev) => ({ ...prev, tag_serial: suggested }));
+      }
+    } else if (mode === 'masiva') {
+      const suggested = getFirstAvailableTagForStation(bulkStation);
+      if (suggested) {
+        setStartSerial(suggested);
+      }
+    }
+  }, [formData.estacion, bulkStation, mode]);
 
   // Generación automática de filas masivas al cambiar Serial Inicial o Cantidad (omitimos automáticamente los ya entregados o sin stock)
   useEffect(() => {
@@ -337,12 +359,13 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
     setMessage({ type: 'success', text: `¡TAG ${tagClean} registrado exitosamente para ${formData.dominio}!` });
     
+    const nextSuggested = getFirstAvailableTagForStation(formData.estacion);
     setFormData((prev) => ({
       ...prev,
       nombre_apellido: '',
       dni_cuit: '',
       dominio: '',
-      tag_serial: '',
+      tag_serial: nextSuggested || '',
       observaciones: '',
       email_contacto: '',
       celular_contacto: '',
@@ -446,8 +469,9 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       text: `¡Entrega Masiva de ${payloads.length} TAGs registrada exitosamente para ${sharedNombre || 'la flota'}!`,
     });
 
-    // Resetear formulario masivo
-    setStartSerial('');
+    // Resetear formulario masivo con el siguiente disponible
+    const nextSuggested = getFirstAvailableTagForStation(bulkStation);
+    setStartSerial(nextSuggested || '');
     setBulkQuantity(5);
     setSharedDniCuit('');
     setSharedNombre('');
@@ -576,7 +600,21 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
               {/* Nº Serie TAG RFID */}
               <div>
-                <label className="block text-xs font-bold text-cs-primary uppercase mb-1">2. Nº Serie TAG RFID *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-cs-primary uppercase">2. Nº Serie TAG RFID *</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const first = getFirstAvailableTagForStation(formData.estacion);
+                      if (first) setFormData((prev) => ({ ...prev, tag_serial: first }));
+                    }}
+                    className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5"
+                    title="Sugerir el primer TAG disponible en stock para esta estación"
+                  >
+                    <Zap className="w-3 h-3 text-emerald-600" />
+                    <span>Primer Disponible</span>
+                  </button>
+                </div>
                 <input
                   type="text"
                   name="tag_serial"
@@ -753,7 +791,21 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
                 {/* Primer TAG Serial */}
                 <div>
-                  <label className="block text-[11px] font-bold text-emerald-800 uppercase mb-1">Primer Nº Serie TAG *</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold text-emerald-800 uppercase">Primer Nº Serie TAG *</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const first = getFirstAvailableTagForStation(bulkStation);
+                        if (first) setStartSerial(first);
+                      }}
+                      className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5"
+                      title="Sugerir el primer TAG disponible en stock para esta estación"
+                    >
+                      <Zap className="w-3 h-3 text-emerald-600" />
+                      <span>Primer Disponible</span>
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={startSerial}

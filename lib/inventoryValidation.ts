@@ -201,6 +201,67 @@ export async function validateTagDeliveryAsync(estacion: string, tagSerial: stri
 }
 
 /**
+ * Encuentra el PRIMER número de TAG disponible en stock en la estación dada que NO haya sido entregado ni transferido.
+ */
+export function getFirstAvailableTagForStation(estacion: string): string | null {
+  if (!estacion) return null;
+  const stClean = cleanStationName(estacion);
+
+  const allBatches = getAllBatches();
+  const allTransfers = getAllTransfers();
+
+  // 1. Recolectar todos los rangos pertenecientes o recepcionados en esta estación
+  const stationRanges: { desde: string; hasta: string }[] = [];
+
+  allBatches.forEach((b) => {
+    if (cleanStationName(b.estacion) === stClean) {
+      stationRanges.push({ desde: b.serial_desde, hasta: b.serial_hasta });
+    }
+  });
+
+  allTransfers.forEach((t) => {
+    if (cleanStationName(t.destino) === stClean && t.estado === 'Recibido') {
+      stationRanges.push({ desde: t.serial_desde, hasta: t.serial_hasta });
+    }
+  });
+
+  if (stationRanges.length === 0) return null;
+
+  // 2. Recorrer rangos e iterar seriales hasta encontrar el primer disponible
+  for (const range of stationRanges) {
+    const dClean = range.desde.trim().toUpperCase();
+    const hClean = range.hasta.trim().toUpperCase();
+
+    const numMatchD = dClean.match(/\d+/);
+    const numMatchH = hClean.match(/\d+/);
+
+    if (numMatchD && numMatchH) {
+      const numStrD = numMatchD[0];
+      const prefix = dClean.substring(0, dClean.indexOf(numStrD));
+      const padLen = numStrD.length;
+
+      const startNum = parseInt(numStrD, 10);
+      const endNum = parseInt(numMatchH[0], 10);
+
+      const maxCheck = Math.min(endNum, startNum + 1000);
+
+      for (let n = startNum; n <= maxCheck; n++) {
+        const candidateSerial = `${prefix}${String(n).padStart(padLen, '0')}`;
+        const valRes = validateTagDelivery(estacion, candidateSerial);
+        if (valRes.valid) {
+          return candidateSerial;
+        }
+      }
+    } else {
+      const valRes = validateTagDelivery(estacion, dClean);
+      if (valRes.valid) return dClean;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Validar si un rango de TAGs [serialDesde, serialHasta] se puede enviar desde un Punto Origen
  */
 export function validateTransferOut(
