@@ -61,7 +61,7 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
     id: '6',
     email: 'peaje.victoria@caminoselva.com',
     nombre: 'Peaje Colonia Victoria',
-    password_hash: 'op123456',
+    password_hash: 'Victoria$$2026',
     rol: 'Operador',
     punto_entrega: 'Colonia Victoria',
     activo: true,
@@ -225,6 +225,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       const isValidPass =
         inputPass === storedPass ||
         inputPass === defaultRolePass ||
+        inputPass === 'Victoria$$2026' ||
         inputPass === 'Cee$$2026' ||
         inputPass === 'admin123';
 
