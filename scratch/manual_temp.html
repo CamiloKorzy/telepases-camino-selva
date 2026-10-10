@@ -1,0 +1,271 @@
+
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8">
+      <title>Manual Oficial de Operación - TelePASE Camino Selva</title>
+      <style>
+        @page {
+          size: A4;
+          margin: 20mm 15mm 20mm 15mm;
+          @bottom-right {
+            content: counter(page);
+          }
+        }
+        body {
+          font-family: 'Segoe UI', Arial, sans-serif;
+          color: #1e293b;
+          line-height: 1.6;
+          font-size: 13px;
+          padding: 0;
+          margin: 0;
+        }
+        .header-box {
+          background-color: #054a29;
+          color: white;
+          padding: 24px 30px;
+          border-radius: 12px;
+          margin-bottom: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .header-title h1 {
+          margin: 0;
+          font-size: 22px;
+          font-weight: 800;
+          color: #ffffff;
+        }
+        .header-title h2 {
+          margin: 4px 0 0 0;
+          font-size: 14px;
+          font-weight: 600;
+          color: #6ee7b7;
+        }
+        .header-logo img {
+          max-height: 50px;
+          background: white;
+          padding: 6px;
+          border-radius: 8px;
+        }
+        h1 {
+          color: #054a29;
+          font-size: 18px;
+          border-bottom: 2px solid #e2e8f0;
+          padding-bottom: 6px;
+          margin-top: 24px;
+        }
+        h2 {
+          color: #043920;
+          font-size: 15px;
+          margin-top: 20px;
+        }
+        h3 {
+          color: #0f766e;
+          font-size: 13px;
+          margin-top: 14px;
+        }
+        p, li {
+          color: #334155;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 16px 0;
+          font-size: 12px;
+        }
+        th {
+          background-color: #0b291a;
+          color: white;
+          text-align: left;
+          padding: 8px 12px;
+          font-weight: 700;
+        }
+        td {
+          padding: 8px 12px;
+          border-bottom: 1px solid #e2e8f0;
+        }
+        tr:nth-child(even) {
+          background-color: #f8fafc;
+        }
+        code {
+          background-color: #f1f5f9;
+          color: #0f766e;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-family: 'Consolas', monospace;
+          font-weight: bold;
+        }
+        pre {
+          background-color: #0f172a;
+          color: #38bdf8;
+          padding: 14px;
+          border-radius: 8px;
+          font-family: 'Consolas', monospace;
+          font-size: 11px;
+          white-space: pre-wrap;
+        }
+        hr {
+          border: none;
+          border-top: 1px solid #cbd5e1;
+          margin: 24px 0;
+        }
+        .badge {
+          display: inline-block;
+          padding: 3px 8px;
+          border-radius: 6px;
+          font-weight: bold;
+          font-size: 11px;
+        }
+        .badge-admin { background-color: #dcfce7; color: #166534; }
+        .badge-op { background-color: #e0f2fe; color: #075985; }
+        .badge-query { background-color: #fef3c7; color: #92400e; }
+        .footer {
+          margin-top: 40px;
+          padding-top: 12px;
+          border-top: 1px solid #cbd5e1;
+          font-size: 10px;
+          color: #64748b;
+          text-align: center;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header-box">
+        <div class="header-title">
+          <h1>MANUAL OFICIAL DE OPERACIÓN</h1>
+          <h2>Plataforma TelePASE - Corredor Vial Noreste (Camino Selva S.A.)</h2>
+        </div>
+      </div>
+
+      <div>
+        <h1>MANUAL COMPLETO Y GUÍA DE APRENDIZAJES - PLATAFORMA TELEPASE</h1>
+<h2>Corredor Vial Noreste - Camino Selva S.A.</h2>
+<p>Bienvenido al <strong>Manual Oficial de Operación de la Plataforma TelePASE</strong>. Este documento está estructurado para que cualquier usuario, sin importar si es su primer día en la casilla de peaje o si es el Administrador General, aprenda a operar el sistema paso a paso con total claridad.</p>
+<hr />
+<h2>1. CONCEPTOS CLAVE ANTES DE EMPEZAR</h2>
+<h3>1.1. ¿Qué es una Oblea / TAG RFID?</h3>
+<p>Un <strong>TAG TelePASE</strong> es una etiqueta/sticker adhesivo con un chip electrónico inteligente que se coloca en el parabrisas de los vehículos. 
+- Cada oblea tiene impreso un <strong>Número de Serie único de 8 dígitos</strong> (ejemplo: <code>63228500</code> o <code>63230000</code>).
+- No pueden existir dos vehículos con el mismo número de TAG.</p>
+<h3>1.2. Puntos de Entrega Oficiales</h3>
+<p>El Corredor Vial Noreste cuenta con 5 estaciones/depósitos registrados:
+1. <strong>Santa Ana</strong> (Peaje Ruta 12)
+2. <strong>Colonia Victoria</strong> (Peaje Ruta 12)
+3. <strong>Paraje Fachinal</strong> (Peaje Ruta 105)
+4. <strong>Ituzaingó</strong> (Peaje Ruta 12)
+5. <strong>Oficina Central</strong> (Depósito Central y Administración)</p>
+<hr />
+<h2>2. EL CIRCUITO DE INVENTARIO (¿De dónde sale el stock?)</h2>
+<p>Para comprender por qué una oblea puede o no entregarse en vía, es fundamental conocer el viaje que hace el stock:</p>
+<pre><code>┌─────────────────┐       Alta de Lote        ┌─────────────────┐
+│ 1. FÁBRICA      │ ────────────────────────&gt; │ 2. OF. CENTRAL  │
+└─────────────────┘                           └─────────────────┘
+                                                       │
+                                            Transferencia (Envío)
+                                                       │
+                                                       ▼
+┌─────────────────┐   Confirmar Recepción     ┌─────────────────┐
+│ 4. ENTREGA VÍA  │ &lt;──────────────────────── │ 3. PEAJE DESTINO│
+│ (-1 disponible) │                           │ (Pend.Recepc.)  │
+└─────────────────┘                           └─────────────────┘
+</code></pre>
+<ol>
+<li><strong>Ingreso a Oficina Central</strong>: Cuando la empresa compra obleas a fábrica (ej. 20.000 unidades), el Administrador las registra en <em>Oficina Central</em> mediante la opción <strong>Alta de Lotes</strong>.</li>
+<li><strong>Transferencias a Peajes</strong>: Oficina Central distribuye el stock enviando cajas/lotes a cada peaje (ej. 1.500 TAGs a Santa Ana). El envío queda en estado <strong>"En Tránsito"</strong> y en la tarjeta del peaje destino se enciende la alerta <strong>"Pend. Recepción"</strong>.</li>
+<li><strong>Confirmación en Peaje</strong>: El operador del peaje abre la pestaña <strong>Movimientos</strong> y hace clic en el botón verde <strong>"Confirmar Recepción"</strong>. A partir de ese segundo, los TAGs quedan en estado <strong>Disponible (disp.)</strong> para entregarse a los conductores.</li>
+<li><strong>Entrega al Vehículo</strong>: Cuando registras 1 entrega en la casilla, el stock <em>Disponible</em> baja en 1 unidad y el stock <em>Entregados</em> aumenta en 1.</li>
+</ol>
+<hr />
+<h2>3. PASO A PASO: ¿CÓMO REGISTRAR TU PRIMERA ENTREGA DE TAG?</h2>
+<p>Sigue este procedimiento exacto cada vez que un vehículo se detenga a solicitar o instalar su TelePASE:</p>
+<h3>Paso 1: Revisa tu Punto de Entrega</h3>
+<ul>
+<li>En el formulario, el primer campo es <strong>Punto de Entrega</strong>. Debe coincidir con la estación donde estás ubicado (ej. <em>Santa Ana</em>).</li>
+</ul>
+<h3>Paso 2: Ingrese la Patente / Dominio</h3>
+<ul>
+<li>Tipea la patente del vehículo sin espacios ni guiones.</li>
+<li><strong>Ejemplos válidos</strong>: <code>AB123CD</code> (Mercosur) o <code>AA100BB</code> o <code>ABC123</code> (Formato anterior).</li>
+</ul>
+<h3>Paso 3: Ingrese DNI / CUIT y Nombre del Conductor</h3>
+<ul>
+<li><strong>DNI / CUIT</strong>: Ingrese el número del titular o CUIT de la empresa (ej: <code>30712345678</code> o <code>20334445559</code>).</li>
+<li><strong>Nombre Receptor</strong>: Nombre completo del conductor o razón social (ej: <em>Juan Pérez</em> o <em>Transporte Misiones S.R.L.</em>).</li>
+</ul>
+<h3>Paso 4: Ingrese el Número de Serie del TAG</h3>
+<ul>
+<li>Tipea o escanea los 8 dígitos del sticker (ej: <code>63230000</code>). La cantidad siempre es <strong>1</strong>.</li>
+</ul>
+<h3>Paso 5: Presione "REGISTRAR ENTREGA DE TAGS"</h3>
+<ul>
+<li>El sistema guardará la operación, el formulario se limpiará de forma automática y la fila aparecerá al instante en la <strong>Grilla de Entregas</strong> de abajo.</li>
+</ul>
+<hr />
+<h2>4. HERRAMIENTA ESPECIAL: REPLICACIÓN PARA FLOTAS Y EMPRESAS</h2>
+<p>Si llega un chofer o apoderado a registrar <strong>10 camiones de la misma empresa</strong>:
+1. Registra el primer vehículo normalmente (<em>Nombre: Transporte Selva S.R.L.</em>, <em>CUIT: 30711112223</em>).
+2. Presiona los botones azules <strong>"Replicar Nombre"</strong> y <strong>"Replicar CUIT"</strong> al lado de los campos.
+3. Al presionar <strong>Registrar Entrega</strong>, el sistema guardará el primer camión pero <strong>MANTENDRÁ RELLENADOS EL NOMBRE Y EL CUIT</strong> para el siguiente formulario.
+4. Para los siguientes 9 camiones, solo tendrás que escribir la nueva Patente y el nuevo TAG. ¡Ahorras más del 70% del tiempo de carga!</p>
+<hr />
+<h2>5. GUÍA RÁPIDA DE RESOLUCIÓN DE MENSAJES DE ERROR</h2>
+<h3>❌ Error 1: "El TAG NO corresponde a ningún lote ni transferencia en la estación"</h3>
+<ul>
+<li><strong>¿Por qué ocurre?</strong>: El número de TAG tipeado no pertenece al inventario cargado o recibido en tu peaje.</li>
+<li><strong>¿Cómo solucionarlo?</strong>: </li>
+<li>Verifica que no hayas cometido un error de tipeo en los dígitos del TAG.</li>
+<li>Si el número es correcto, verifica en la pestaña <strong>Movimientos</strong> si el paquete de TAGs figura pendiente de recepción.</li>
+</ul>
+<h3>⚠️ Error 2: "El TAG proviene de una transferencia PENDIENTE DE RECEPCIÓN"</h3>
+<ul>
+<li><strong>¿Por qué ocurre?</strong>: La caja de TAGs fue enviada a tu peaje pero ningún operador ingresó aún a confirmar el remito.</li>
+<li><strong>¿Cómo solucionarlo?</strong>: Entra a la pestaña <strong>Movimientos</strong> y haz clic en el botón verde <strong>"Confirmar Recepción"</strong>. Luego vuelve al formulario y regístralo.</li>
+</ul>
+<h3>🚫 Error 3: "El TAG ya fue entregado previamente"</h3>
+<ul>
+<li><strong>¿Por qué ocurre?</strong>: Ese número de serie ya fue registrado en otro vehículo. No se permite duplicar entregas de obleas.</li>
+</ul>
+<hr />
+<h2>6. USUARIOS Y PERMISOS DE SEGURIDAD</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Rol de Usuario</th>
+<th style="text-align: left;">Permisos y Alcance en la Plataforma</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Administrador</strong></td>
+<td style="text-align: left;">Acceso total: Usuarios, Alta de Lotes, Edición/Eliminación de entregas y Botón "Limpiar Entregas".</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Operador</strong></td>
+<td style="text-align: left;">Trabajo en casilla: Registración de entregas en vía y confirmación de transferencias de su peaje.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Consulta</strong></td>
+<td style="text-align: left;">Auditoría y Supervisión: Solo lectura de inventarios, tarjetas e informes (sin permisos de edición).</td>
+</tr>
+</tbody>
+</table>
+<p><em>Seguridad de Acceso</em>: Cada usuario debe ingresar con su correo corporativo y contraseña asignada por el Administrador. Se recomienda activar el tilde <strong>"Recordar mi usuario"</strong> en la pantalla de inicio de sesión para que el sistema recuerde tu dirección de correo electrónico en el navegador.</p>
+<hr />
+<h2>7. EXPORTACIÓN DE REPORTES (EXCEL Y CSV)</h2>
+<p>Los botones <strong>"Descargar XLS"</strong> y <strong>"CSV"</strong> descargan los datos filtrados en pantalla conteniendo únicamente las <strong>7 columnas oficiales</strong>:
+1. <strong>Fecha/Hora</strong>
+2. <strong>Punto de Entrega</strong>
+3. <strong>Patente</strong>
+4. <strong>TAG Serial</strong>
+5. <strong>DNI / CUIT</strong>
+6. <strong>Nombre Receptor</strong>
+7. <strong>Usuario Registrador</strong></p>
+      </div>
+
+      <div class="footer">
+        Documentación Oficial del Área de IT - CEE ENRIQUEZ / Camino Selva S.A. | Generado para Distribución Corporativa
+      </div>
+    </body>
+    </html>
+    
