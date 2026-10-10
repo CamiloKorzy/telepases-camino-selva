@@ -216,11 +216,30 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       } catch {}
 
       // 3. Incluir cuentas por defecto si no existen aún en la lista
+      const missingInList: UserProfile[] = [];
       DEFAULT_ACCOUNTS.forEach((def) => {
         if (!registeredUsers.some((u) => u.email.toLowerCase() === def.email.toLowerCase())) {
           registeredUsers.push(def);
+          missingInList.push(def);
         }
       });
+
+      // Intentar sincronizar las cuentas por defecto faltantes en Supabase (en segundo plano)
+      if (missingInList.length > 0) {
+        try {
+          await supabase.from('user_profiles').upsert(
+            missingInList.map((u) => ({
+              email: u.email.toLowerCase(),
+              nombre: fixUserName(u.nombre),
+              password_hash: u.password_hash,
+              rol: u.rol,
+              punto_entrega: u.punto_entrega,
+              activo: u.activo,
+            })),
+            { onConflict: 'email' }
+          );
+        } catch {}
+      }
 
       const normalizeUserKey = (str: string): string => {
         return str
