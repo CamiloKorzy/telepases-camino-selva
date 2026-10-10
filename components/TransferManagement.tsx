@@ -708,73 +708,111 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
                 </span>
               </div>
 
-              <div className="space-y-2 border border-slate-200 p-3 rounded-xl bg-slate-50/50">
-                {rangeRows.map((row, idx) => (
-                  <div
-                    key={row.id}
-                    className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-2xs"
-                  >
-                    <div className="sm:col-span-1 text-[11px] font-extrabold text-slate-400 text-center">
-                      #{idx + 1}
-                    </div>
+              <div className="space-y-3 border border-slate-200 p-3 rounded-xl bg-slate-50/50">
+                {rangeRows.map((row, idx) => {
+                  const sDesde = row.serialDesde.trim();
+                  const sHasta = row.serialHasta.trim();
+                  const qty = parseInt(row.cantidad, 10) || 0;
+                  const hasSerials = sDesde.length > 0 && sHasta.length > 0;
+                  const rowVal = hasSerials ? validateTransferOut(origen, sDesde, sHasta, qty) : null;
 
-                    <div className="sm:col-span-4">
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
-                        Inicia (Serial Desde)
-                      </label>
-                      <input
-                        type="text"
-                        value={row.serialDesde}
-                        onChange={(e) => handleRangeRowChange(row.id, 'serialDesde', e.target.value)}
-                        placeholder="ej. 63228500"
-                        className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                        required
-                      />
-                    </div>
+                  return (
+                    <div
+                      key={row.id}
+                      className={`p-3 rounded-xl border transition space-y-2 ${
+                        rowVal && !rowVal.valid
+                          ? 'bg-rose-50/40 border-rose-300'
+                          : rowVal && rowVal.valid
+                          ? 'bg-emerald-50/30 border-emerald-300'
+                          : 'bg-white border-slate-200 shadow-2xs'
+                      }`}
+                    >
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                        <div className="sm:col-span-1 text-[11px] font-extrabold text-slate-400 text-center">
+                          #{idx + 1}
+                        </div>
 
-                    <div className="sm:col-span-4">
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
-                        Termina (Serial Hasta)
-                      </label>
-                      <input
-                        type="text"
-                        value={row.serialHasta}
-                        onChange={(e) => handleRangeRowChange(row.id, 'serialHasta', e.target.value)}
-                        placeholder="ej. 63229999"
-                        className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                        required
-                      />
-                    </div>
+                        <div className="sm:col-span-4">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                            Inicia (Serial Desde)
+                          </label>
+                          <input
+                            type="text"
+                            value={row.serialDesde}
+                            onChange={(e) => handleRangeRowChange(row.id, 'serialDesde', e.target.value)}
+                            placeholder="ej. 63228500"
+                            className={`w-full p-2 rounded-lg border text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none ${
+                              rowVal && !rowVal.valid
+                                ? 'border-rose-400 bg-rose-50 text-rose-900'
+                                : 'border-slate-300 bg-white text-slate-900'
+                            }`}
+                            required
+                          />
+                        </div>
 
-                    <div className="sm:col-span-2">
-                      <label className="block text-[10px] font-bold text-emerald-700 uppercase mb-0.5">
-                        Cantidad (u.)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={row.cantidad}
-                        onChange={(e) => handleRangeRowChange(row.id, 'cantidad', e.target.value)}
-                        placeholder="1500"
-                        className="w-full p-2 rounded-lg border-2 border-emerald-400 font-mono font-bold text-emerald-900 text-xs bg-emerald-50/60 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                        required
-                      />
-                    </div>
+                        <div className="sm:col-span-4">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                            Termina (Serial Hasta)
+                          </label>
+                          <input
+                            type="text"
+                            value={row.serialHasta}
+                            onChange={(e) => handleRangeRowChange(row.id, 'serialHasta', e.target.value)}
+                            placeholder="ej. 63229999"
+                            className={`w-full p-2 rounded-lg border text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none ${
+                              rowVal && !rowVal.valid
+                                ? 'border-rose-400 bg-rose-50 text-rose-900'
+                                : 'border-slate-300 bg-white text-slate-900'
+                            }`}
+                            required
+                          />
+                        </div>
 
-                    <div className="sm:col-span-1 flex items-center justify-center pt-3 sm:pt-0">
-                      {rangeRows.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveRangeRow(row.id)}
-                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                          title="Eliminar este rango"
-                        >
-                          <Trash className="w-4 h-4" />
-                        </button>
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-emerald-700 uppercase mb-0.5">
+                            Cantidad (u.)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={row.cantidad}
+                            onChange={(e) => handleRangeRowChange(row.id, 'cantidad', e.target.value)}
+                            placeholder="1500"
+                            className="w-full p-2 rounded-lg border-2 border-emerald-400 font-mono font-bold text-emerald-900 text-xs bg-emerald-50/60 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                            required
+                          />
+                        </div>
+
+                        <div className="sm:col-span-1 flex items-center justify-center pt-3 sm:pt-0">
+                          {rangeRows.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRangeRow(row.id)}
+                              className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                              title="Eliminar este rango"
+                            >
+                              <Trash className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Alerta de Validación de Stock en Origen */}
+                      {rowVal && !rowVal.valid && (
+                        <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-bold flex items-start space-x-1.5 leading-snug">
+                          <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                          <span>{rowVal.error}</span>
+                        </div>
+                      )}
+                      {rowVal && rowVal.valid && (
+                        <div className="text-[10px] text-emerald-800 font-bold flex items-center space-x-1 px-1">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                          <span>Rango verificado disponible en stock de {origen}</span>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 <div className="flex items-center justify-between pt-2">
                   <button
@@ -809,18 +847,36 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-3 bg-cs-primary hover:bg-cs-dark text-white font-bold text-xs rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 uppercase tracking-wider"
-            >
-              <Truck className="w-4 h-4 text-cs-accent" />
-              <span>
-                {submitting
-                  ? 'Registrando Envío...'
-                  : `🚚 REGISTRAR ENVÍO (${totalTagsInForm.toLocaleString('es-AR')} TAGs DE ${origen.toUpperCase()} A ${destino.toUpperCase()})`}
-              </span>
-            </button>
+            {(() => {
+              const isTransferFormValid =
+                rangeRows.length > 0 &&
+                rangeRows.every((row) => {
+                  const sDesde = row.serialDesde.trim();
+                  const sHasta = row.serialHasta.trim();
+                  const qty = parseInt(row.cantidad, 10) || 0;
+                  if (!sDesde || !sHasta || qty <= 0) return false;
+                  return validateTransferOut(origen, sDesde, sHasta, qty).valid;
+                });
+
+              return (
+                <button
+                  type="submit"
+                  disabled={submitting || !isTransferFormValid}
+                  className={`w-full py-3 font-bold text-xs rounded-xl transition shadow-md flex items-center justify-center space-x-2 uppercase tracking-wider ${
+                    isTransferFormValid && !submitting
+                      ? 'bg-cs-primary hover:bg-cs-dark text-white cursor-pointer'
+                      : 'bg-slate-300 text-slate-500 cursor-not-allowed border border-slate-300'
+                  }`}
+                >
+                  <Truck className="w-4 h-4 text-cs-accent" />
+                  <span>
+                    {submitting
+                      ? 'Registrando Envío...'
+                      : `🚚 REGISTRAR ENVÍO (${totalTagsInForm.toLocaleString('es-AR')} TAGs DE ${origen.toUpperCase()} A ${destino.toUpperCase()})`}
+                  </span>
+                </button>
+              );
+            })()}
           </form>
         </div>
       )}
