@@ -1,6 +1,6 @@
 import { TagBatch, TagTransfer, TagDelivery } from '@/types/database';
 import { supabase } from '@/lib/supabase';
-import { DEFAULT_BATCHES } from '@/lib/deliveryPoints';
+import { DEFAULT_BATCHES, DEFAULT_TRANSFERS } from '@/lib/deliveryPoints';
 
 const LOCAL_BATCHES_KEY = 'telepase_local_tag_batches';
 const LOCAL_TRANSFERS_KEY = 'telepase_local_tag_transfers';
@@ -24,8 +24,19 @@ export function getAllBatches(): TagBatch[] {
       } catch {}
     }
   }
-  if (localBatches.length === 0) {
+
+  const isOldSeed = localBatches.some(
+    (b) => b && (b.serial_desde === '63226500' || b.cantidad === 500 || b.cantidad === 501)
+  );
+  const hasRealBatches = localBatches.some((b) => b && b.serial_desde === '63228500');
+
+  if (localBatches.length === 0 || isOldSeed || !hasRealBatches) {
     localBatches = DEFAULT_BATCHES;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(localBatches));
+      } catch {}
+    }
   }
   return localBatches;
 }
@@ -40,6 +51,20 @@ export function getAllTransfers(): TagTransfer[] {
     if (stored) {
       try {
         localTransfers = JSON.parse(stored);
+      } catch {}
+    }
+  }
+
+  const isOldSeed = localTransfers.some(
+    (t) => t && (t.serial_desde === '63226500' || t.cantidad === 500 || t.cantidad === 501)
+  );
+  const hasRealTransfers = localTransfers.some((t) => t && t.serial_desde === '63228500');
+
+  if (localTransfers.length === 0 || isOldSeed || !hasRealTransfers) {
+    localTransfers = DEFAULT_TRANSFERS;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(LOCAL_TRANSFERS_KEY, JSON.stringify(localTransfers));
       } catch {}
     }
   }

@@ -11,7 +11,7 @@ import BatchManagement from '@/components/BatchManagement';
 import DeliveryPointManagement from '@/components/DeliveryPointManagement';
 import TransferManagement from '@/components/TransferManagement';
 import ScheduledReportModal from '@/components/ScheduledReportModal';
-import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName, DEFAULT_BATCHES } from '@/lib/deliveryPoints';
+import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName, DEFAULT_BATCHES, DEFAULT_TRANSFERS } from '@/lib/deliveryPoints';
 import ActivationDocManagement, { getActivationDocConfig, generateWhatsAppLink } from '@/components/ActivationDocManagement';
 import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
@@ -168,21 +168,15 @@ export default function AntigravityDashboard() {
     if (storedBatches) {
       try {
         localBatches = JSON.parse(storedBatches);
-        let updated = false;
-        localBatches = localBatches.map((b) => {
-          if (b && b.serial_desde === '63226500' && b.serial_hasta === '63227000' && b.cantidad === 501) {
-            updated = true;
-            return { ...b, cantidad: 500 };
-          }
-          return b;
-        });
-        if (updated) {
-          localStorage.setItem('telepase_local_tag_batches', JSON.stringify(localBatches));
-        }
       } catch {}
     }
 
-    if (localBatches.length === 0) {
+    const isOldSeedBatches = localBatches.some(
+      (b) => b && (b.serial_desde === '63226500' || b.cantidad === 500 || b.cantidad === 501)
+    );
+    const hasRealBatches = localBatches.some((b) => b && b.serial_desde === '63228500');
+
+    if (localBatches.length === 0 || isOldSeedBatches || !hasRealBatches) {
       localBatches = DEFAULT_BATCHES;
       try {
         localStorage.setItem('telepase_local_tag_batches', JSON.stringify(localBatches));
@@ -193,6 +187,18 @@ export default function AntigravityDashboard() {
     if (storedTransfers) {
       try {
         localTransfers = JSON.parse(storedTransfers);
+      } catch {}
+    }
+
+    const isOldSeedTransfers = localTransfers.some(
+      (t) => t && (t.serial_desde === '63226500' || t.cantidad === 500 || t.cantidad === 501)
+    );
+    const hasRealTransfers = localTransfers.some((t) => t && t.serial_desde === '63228500');
+
+    if (localTransfers.length === 0 || isOldSeedTransfers || !hasRealTransfers) {
+      localTransfers = DEFAULT_TRANSFERS;
+      try {
+        localStorage.setItem('telepase_local_tag_transfers', JSON.stringify(localTransfers));
       } catch {}
     }
 
