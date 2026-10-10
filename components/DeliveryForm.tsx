@@ -222,6 +222,32 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     );
   };
 
+  const generateSequentialPlates = () => {
+    if (bulkRows.length === 0) return;
+    const firstDom = bulkRows[0]?.dominio.trim().toUpperCase();
+    if (!firstDom) return;
+
+    const numMatch = firstDom.match(/\d+/);
+    if (!numMatch) return;
+
+    const numStr = numMatch[0];
+    const prefix = firstDom.substring(0, firstDom.indexOf(numStr));
+    const suffix = firstDom.substring(firstDom.indexOf(numStr) + numStr.length);
+    const padLen = numStr.length;
+    const startNum = parseInt(numStr, 10);
+
+    setBulkRows((prev) =>
+      prev.map((r, i) => {
+        const nextNum = startNum + i;
+        const nextNumStr = String(nextNum).padStart(padLen, '0');
+        return {
+          ...r,
+          dominio: `${prefix}${nextNumStr}${suffix}`,
+        };
+      })
+    );
+  };
+
   // Validaciones en tiempo real para modo individual y masivo
   const singleTagValidation = formData.tag_serial.trim()
     ? validateTagDelivery(formData.estacion, formData.tag_serial)
@@ -229,6 +255,10 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
   const bulkInvalidRowsCount = bulkRows.filter(
     (r) => r.tagSerial.trim() && !validateTagDelivery(bulkStation, r.tagSerial).valid
+  ).length;
+
+  const bulkIncompleteRowsCount = bulkRows.filter(
+    (r) => !r.tagSerial.trim() || !r.dominio.trim() || !(r.dniCuit || sharedDniCuit).trim()
   ).length;
 
   const handleSubmitIndividual = async (e: React.FormEvent) => {
@@ -797,6 +827,13 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                     </button>
                   )}
 
+                  {bulkIncompleteRowsCount > 0 && (
+                    <span className="text-xs font-bold text-rose-800 bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-lg flex items-center space-x-1 shadow-xs">
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
+                      <span>{bulkIncompleteRowsCount} con obligatorios pendientes</span>
+                    </span>
+                  )}
+
                   {bulkInvalidRowsCount > 0 && (
                     <button
                       type="button"
@@ -826,7 +863,22 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                         <th className="p-2.5 text-center w-10">#</th>
                         <th className="p-2.5">TAG Serial *</th>
                         <th className="p-2.5">Estado Stock</th>
-                        <th className="p-2.5">Dominio / Patente *</th>
+                        <th className="p-2.5">
+                          <div className="flex items-center justify-between">
+                            <span>Dominio / Patente *</span>
+                            {bulkRows.length > 1 && bulkRows[0]?.dominio && (
+                              <button
+                                type="button"
+                                onClick={generateSequentialPlates}
+                                className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5 ml-1"
+                                title="Generar patentes correlativas/secuenciales (ej. AA123CD, AA124CD...) a partir de la Fila 1"
+                              >
+                                <Hash className="w-3 h-3" />
+                                <span>Correlativos</span>
+                              </button>
+                            )}
+                          </div>
+                        </th>
                         <th className="p-2.5">
                           <div className="flex items-center justify-between">
                             <span>DNI / CUIT *</span>
@@ -864,9 +916,11 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                           : null;
 
                         const isAlreadyDelivered = rowVal && !rowVal.valid && rowVal.error?.toLowerCase().includes('ya fue entregado');
+                        const isMissingDominio = !row.dominio.trim();
+                        const isMissingDni = !(row.dniCuit || sharedDniCuit).trim();
 
                         return (
-                          <tr key={row.id} className={`transition ${rowVal && !rowVal.valid ? 'bg-rose-50/40' : 'hover:bg-emerald-50/30'}`}>
+                          <tr key={row.id} className={`transition ${rowVal && !rowVal.valid ? 'bg-rose-50/40' : (isMissingDominio || isMissingDni) ? 'bg-amber-50/20' : 'hover:bg-emerald-50/30'}`}>
                             <td className="p-2.5 text-center font-mono font-extrabold text-slate-400">
                               {idx + 1}
                             </td>
@@ -910,9 +964,13 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                                 type="text"
                                 value={row.dominio}
                                 onChange={(e) => handleBulkRowChange(row.id, 'dominio', e.target.value)}
-                                placeholder="AA123CD"
+                                placeholder="OBLIGATORIO"
                                 maxLength={8}
-                                className="w-full p-1.5 rounded-lg border-2 border-cs-primary/50 font-mono font-bold text-slate-900 text-xs uppercase bg-cs-primary/5 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                                className={`w-full p-1.5 rounded-lg border-2 font-mono font-bold text-xs uppercase focus:ring-2 focus:outline-none ${
+                                  isMissingDominio
+                                    ? 'border-rose-400 bg-rose-50/60 text-rose-900 placeholder-rose-400 focus:ring-rose-500'
+                                    : 'border-cs-primary/50 text-slate-900 bg-cs-primary/5 focus:ring-cs-primary'
+                                }`}
                                 required
                               />
                             </td>
@@ -921,8 +979,12 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                                 type="text"
                                 value={row.dniCuit}
                                 onChange={(e) => handleBulkRowChange(row.id, 'dniCuit', e.target.value)}
-                                placeholder="30712345678"
-                                className="w-full p-1.5 rounded-lg border border-slate-300 font-medium text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                                placeholder={sharedDniCuit.trim() ? sharedDniCuit : "OBLIGATORIO"}
+                                className={`w-full p-1.5 rounded-lg border text-xs focus:ring-2 focus:outline-none ${
+                                  isMissingDni
+                                    ? 'border-rose-400 bg-rose-50/60 text-rose-900 placeholder-rose-400 font-semibold focus:ring-rose-500'
+                                    : 'border-slate-300 font-medium text-slate-900 focus:ring-cs-primary'
+                                }`}
                                 required
                               />
                             </td>
@@ -947,7 +1009,13 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
             {/* Botón de Guardar Entrega Masiva */}
             <button
               type="submit"
-              disabled={loading || currentUser.rol === 'Consulta' || bulkRows.length === 0 || bulkInvalidRowsCount > 0}
+              disabled={
+                loading ||
+                currentUser.rol === 'Consulta' ||
+                bulkRows.length === 0 ||
+                bulkInvalidRowsCount > 0 ||
+                bulkIncompleteRowsCount > 0
+              }
               className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-sm rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 uppercase tracking-wider"
             >
               <Truck className="w-5 h-5" />
@@ -956,6 +1024,10 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                   ? 'SOLO LECTURA (REGISTRO DESHABILITADO)'
                   : loading
                   ? 'Registrando Flota...'
+                  : bulkIncompleteRowsCount > 0
+                  ? `⚠️ COMPLETAR CAMPOS OBLIGATORIOS (PATENTE / CUIT) PARA GUARDAR`
+                  : bulkInvalidRowsCount > 0
+                  ? `⛔ OMITIR TAGS SIN STOCK PARA GUARDAR`
                   : `🚚 GUARDAR Y REGISTRAR ENTREGA MASIVA (${bulkRows.length} TAGs)`}
               </span>
             </button>
