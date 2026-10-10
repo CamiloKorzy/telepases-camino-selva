@@ -11,10 +11,11 @@ import BatchManagement from '@/components/BatchManagement';
 import DeliveryPointManagement from '@/components/DeliveryPointManagement';
 import TransferManagement from '@/components/TransferManagement';
 import ScheduledReportModal from '@/components/ScheduledReportModal';
+import UserGuideModal from '@/components/UserGuideModal';
 import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName, DEFAULT_BATCHES, DEFAULT_TRANSFERS } from '@/lib/deliveryPoints';
 import ActivationDocManagement, { getActivationDocConfig, generateWhatsAppLink } from '@/components/ActivationDocManagement';
 import AuditLogViewer from '@/components/AuditLogViewer';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText, ShieldAlert } from 'lucide-react';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText, ShieldAlert, HelpCircle } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 import TagSeriesDetailModal from '@/components/TagSeriesDetailModal';
 import { logUserAction } from '@/lib/auditLogger';
@@ -31,6 +32,7 @@ export default function AntigravityDashboard() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users' | 'settings_docs' | 'settings_audit'>('dashboard');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [selectedSeriesStation, setSelectedSeriesStation] = useState<string>('Todas');
 
   const docConfig = useMemo(() => getActivationDocConfig(), [activeTab]);
@@ -821,6 +823,15 @@ export default function AntigravityDashboard() {
             </div>
 
             <button
+              onClick={() => setIsHelpModalOpen(true)}
+              className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-cs-primary border border-emerald-300 rounded-xl transition flex items-center space-x-1.5 text-xs font-bold shadow-2xs"
+              title="Abrir Guía de Operación y Manual del Sistema TelePASE"
+            >
+              <HelpCircle className="w-4 h-4 text-cs-primary" />
+              <span className="hidden sm:inline">Ayuda / Guía</span>
+            </button>
+
+            <button
               onClick={fetchData}
               className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
               title="Recargar Datos"
@@ -1408,6 +1419,11 @@ export default function AntigravityDashboard() {
         onClose={() => setIsSeriesModalOpen(false)}
         initialStation={selectedSeriesStation}
         availableStations={availableStations}
+      />
+
+      <UserGuideModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
       />
 
       {/* Invisible Sync Bridge IFrames to auto-restore data from previous Vercel deployment domains */}
