@@ -3,6 +3,18 @@ import { PeajeStock } from '@/types/database';
 
 const STORAGE_KEY = 'telepase_master_delivery_points_v4';
 
+/**
+ * Corrige nombres truncados o erróneos de usuarios o estaciones (ej. "Peaje Colonia Victori" -> "Peaje Colonia Victoria")
+ */
+export function fixUserName(name?: string | null): string {
+  if (!name) return '';
+  const trimmed = name.trim();
+  if (/victori$/i.test(trimmed)) {
+    return trimmed + 'a';
+  }
+  return trimmed;
+}
+
 const DEFAULT_STATIONS: PeajeStock[] = [
   { estacion: 'Santa Ana', stock_recibido: 0, stock_entregado: 0, stock_minimo_alerta: 150 },
   { estacion: 'Colonia Victoria', stock_recibido: 0, stock_entregado: 0, stock_minimo_alerta: 100 },

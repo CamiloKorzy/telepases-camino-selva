@@ -11,7 +11,7 @@ import BatchManagement from '@/components/BatchManagement';
 import DeliveryPointManagement from '@/components/DeliveryPointManagement';
 import TransferManagement from '@/components/TransferManagement';
 import ScheduledReportModal from '@/components/ScheduledReportModal';
-import { getMasterDeliveryPoints, getMasterDeliveryPointsSync } from '@/lib/deliveryPoints';
+import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName } from '@/lib/deliveryPoints';
 import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, BarChart3, Calendar } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 
@@ -47,10 +47,11 @@ export default function AntigravityDashboard() {
       try {
         const session: UserSession = JSON.parse(stored);
         if (session.activo !== false) {
+          session.nombre = fixUserName(session.nombre);
           if (!session.rol) {
             session.rol = 'Administrador';
-            localStorage.setItem('telepase_user_session', JSON.stringify(session));
           }
+          localStorage.setItem('telepase_user_session', JSON.stringify(session));
           setUserSession(session);
         } else {
           localStorage.removeItem('telepase_user_session');
@@ -933,7 +934,7 @@ export default function AntigravityDashboard() {
                             <td className="p-3 font-semibold text-slate-800 font-mono">{item.dni_cuit}</td>
                             <td className="p-3 text-slate-700">{item.nombre_apellido || '-'}</td>
                             <td className="p-3 font-semibold text-slate-700 whitespace-nowrap bg-emerald-50/40 text-emerald-900">
-                              {item.operador_runner}
+                              {fixUserName(item.operador_runner)}
                             </td>
                             <td className="p-3 text-slate-500 max-w-[150px] truncate">{item.observaciones || '-'}</td>
                             {isAdmin && (

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagDelivery, UserSession, TagBatch } from '@/types/database';
-import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
+import { getMasterDeliveryPoints, fixUserName } from '@/lib/deliveryPoints';
 import { validateTagDelivery, validateTagDeliveryAsync, refreshInventoryCache } from '@/lib/inventoryValidation';
 import { CheckCircle2, AlertCircle, Save, Car, User, Users, Truck, Copy, Plus, RefreshCw, Hash } from 'lucide-react';
 
@@ -357,7 +357,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           </div>
           <div className="flex items-center space-x-1.5 text-xs bg-white/10 text-emerald-200 px-3 py-1 rounded-full border border-white/15">
             <User className="w-3.5 h-3.5 text-cs-accent" />
-            <span className="font-semibold">{currentUser.nombre}</span>
+            <span className="font-semibold">{fixUserName(currentUser.nombre)}</span>
           </div>
         </div>
 

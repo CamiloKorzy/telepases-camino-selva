@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { UserProfile, UserSession } from '@/types/database';
+import { fixUserName } from '@/lib/deliveryPoints';
 import { Lock, Mail, LogIn, AlertCircle, ShieldCheck } from 'lucide-react';
 
 interface LoginFormProps {
@@ -53,6 +54,33 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
     password_hash: 'consulta123',
     rol: 'Consulta',
     punto_entrega: 'Todos',
+    activo: true,
+  },
+  {
+    id: '6',
+    email: 'operador.coloniavictoria@caminoselva.com',
+    nombre: 'Peaje Colonia Victoria',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Colonia Victoria',
+    activo: true,
+  },
+  {
+    id: '7',
+    email: 'operador.parajefachinal@caminoselva.com',
+    nombre: 'Peaje Paraje Fachinal',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Paraje Fachinal',
+    activo: true,
+  },
+  {
+    id: '8',
+    email: 'operador.ituzaingo@caminoselva.com',
+    nombre: 'Peaje Ituzaingó',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Ituzaingó',
     activo: true,
   },
 ];
@@ -128,7 +156,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       // 6. Generar y guardar la sesión de usuario activa
       const session: UserSession = {
         email: foundUser.email,
-        nombre: foundUser.nombre,
+        nombre: fixUserName(foundUser.nombre),
         rol: foundUser.rol || 'Operador',
         punto_entrega: foundUser.punto_entrega || 'Todos',
         activo: true,

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { UserProfile, PeajeStock } from '@/types/database';
 import { UserPlus, Shield, UserCheck, UserX, AlertCircle, CheckCircle2, RefreshCw, Key, Info, Edit, X, Save, MapPin } from 'lucide-react';
-import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
+import { getMasterDeliveryPoints, fixUserName } from '@/lib/deliveryPoints';
 import ConfirmModal from '@/components/ConfirmModal';
 
 const LOCAL_USERS_KEY = 'telepase_registered_user_profiles';
@@ -53,6 +53,15 @@ const DEFAULT_USERS: UserProfile[] = [
     password_hash: 'consulta123',
     rol: 'Consulta',
     punto_entrega: 'Todos',
+    activo: true,
+  },
+  {
+    id: '6',
+    email: 'operador.coloniavictoria@caminoselva.com',
+    nombre: 'Peaje Colonia Victoria',
+    password_hash: 'op123456',
+    rol: 'Operador',
+    punto_entrega: 'Colonia Victoria',
     activo: true,
   },
 ];
@@ -111,6 +120,8 @@ export default function UserManagement() {
       localUsers = DEFAULT_USERS;
     }
 
+    localUsers = localUsers.map((u) => ({ ...u, nombre: fixUserName(u.nombre) }));
+
     if (!localUsers.some((u) => u.email === 'camilo.k@ceeenriquez.com')) {
       localUsers.unshift(DEFAULT_USERS[0]);
     }
@@ -128,7 +139,7 @@ export default function UserManagement() {
           await supabase.from('user_profiles').upsert(
             pendingSyncs.map((u) => ({
               email: u.email.toLowerCase(),
-              nombre: u.nombre,
+              nombre: fixUserName(u.nombre),
               password_hash: u.password_hash,
               rol: u.rol,
               punto_entrega: u.punto_entrega,
@@ -149,7 +160,7 @@ export default function UserManagement() {
         .order('created_at', { ascending: false });
 
       if (!error && dbUsers) {
-        let finalUsers = dbUsers;
+        let finalUsers = dbUsers.map((u) => ({ ...u, nombre: fixUserName(u.nombre) }));
 
         const missingDefaults = DEFAULT_USERS.filter(
           (def) => !finalUsers.some((u) => u.email.toLowerCase() === def.email.toLowerCase())
@@ -160,7 +171,7 @@ export default function UserManagement() {
             await supabase.from('user_profiles').upsert(
               missingDefaults.map((u) => ({
                 email: u.email.toLowerCase(),
-                nombre: u.nombre,
+                nombre: fixUserName(u.nombre),
                 password_hash: u.password_hash,
                 rol: u.rol,
                 punto_entrega: u.punto_entrega,
@@ -175,7 +186,7 @@ export default function UserManagement() {
               .order('created_at', { ascending: false });
 
             if (refreshedUsers && refreshedUsers.length > 0) {
-              finalUsers = refreshedUsers;
+              finalUsers = refreshedUsers.map((u) => ({ ...u, nombre: fixUserName(u.nombre) }));
             }
           } catch {}
         }

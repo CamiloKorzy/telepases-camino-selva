@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import { TagTransfer, TagBatch, UserSession } from '@/types/database';
 import { Truck, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, ArrowRight, CheckCircle, XCircle, Trash2, Plus, Trash, Layers, FileSpreadsheet, Search, Filter } from 'lucide-react';
-import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
+import { getMasterDeliveryPoints, fixUserName } from '@/lib/deliveryPoints';
 import { validateTransferOut } from '@/lib/inventoryValidation';
 
 import ConfirmModal from '@/components/ConfirmModal';
@@ -148,7 +148,7 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
         cantidad: Number(b.cantidad) || 0,
         estado: 'Ingresado',
         numero_remito: b.numero_remito || 'Lote Alta',
-        usuario_envio: b.usuario_registro || 'Administrador',
+        usuario_envio: fixUserName(b.usuario_registro || 'Administrador'),
         observaciones: b.observaciones || 'Ingreso de Lote al Sistema',
       }));
 
@@ -165,8 +165,8 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
         cantidad: Number(t.cantidad) || 0,
         estado: t.estado as any,
         numero_remito: t.numero_remito_transferencia || '-',
-        usuario_envio: t.usuario_envio,
-        usuario_recepcion: t.usuario_recepcion,
+        usuario_envio: fixUserName(t.usuario_envio),
+        usuario_recepcion: fixUserName(t.usuario_recepcion),
         observaciones: t.observaciones || '',
         rawTransfer: t,
       }));
