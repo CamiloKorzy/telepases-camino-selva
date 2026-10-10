@@ -26,8 +26,8 @@ export default function AntigravityDashboard() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users'>('dashboard');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
-  // Filtros temporales para indicadores y grilla
-  const [dateFilterMode, setDateFilterMode] = useState<'todos' | 'hoy' | 'semana' | 'mes' | 'rango'>('mes');
+  // Filtros temporales para indicadores y grilla (Default: Hoy)
+  const [dateFilterMode, setDateFilterMode] = useState<'todos' | 'hoy' | 'semana' | 'mes' | 'rango'>('hoy');
   const [customFechaDesde, setCustomFechaDesde] = useState<string>('');
   const [customFechaHasta, setCustomFechaHasta] = useState<string>('');
 
