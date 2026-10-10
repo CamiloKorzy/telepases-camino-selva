@@ -13,9 +13,11 @@ import TransferManagement from '@/components/TransferManagement';
 import ScheduledReportModal from '@/components/ScheduledReportModal';
 import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName, DEFAULT_BATCHES, DEFAULT_TRANSFERS } from '@/lib/deliveryPoints';
 import ActivationDocManagement, { getActivationDocConfig, generateWhatsAppLink } from '@/components/ActivationDocManagement';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText } from 'lucide-react';
+import AuditLogViewer from '@/components/AuditLogViewer';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText, ShieldAlert } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 import TagSeriesDetailModal from '@/components/TagSeriesDetailModal';
+import { logUserAction } from '@/lib/auditLogger';
 
 export default function AntigravityDashboard() {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -25,7 +27,7 @@ export default function AntigravityDashboard() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStation, setSelectedStation] = useState<string>('Todas');
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users' | 'settings_docs'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users' | 'settings_docs' | 'settings_audit'>('dashboard');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
   const [selectedSeriesStation, setSelectedSeriesStation] = useState<string>('Todas');
@@ -365,6 +367,14 @@ export default function AntigravityDashboard() {
   }, [userSession]);
 
   const handleLogout = () => {
+    if (userSession) {
+      logUserAction(
+        userSession,
+        'CIERRE_SESION',
+        'Autenticación',
+        `Cierre de sesión de ${userSession.nombre} (${userSession.email})`
+      );
+    }
     localStorage.removeItem('telepase_user_session');
     supabase.auth.signOut();
     setUserSession(null);
@@ -416,6 +426,13 @@ export default function AntigravityDashboard() {
       } catch {}
     }
 
+    logUserAction(
+      userSession,
+      'EDICION_ENTREGA',
+      'Entregas',
+      `Edición de entrega TAG ${editTagSerial} - Vehículo Dominio: ${editDominio} (DNI/CUIT: ${editDniCuit})`
+    );
+
     setEditingDelivery(null);
     fetchData();
   };
@@ -458,6 +475,13 @@ export default function AntigravityDashboard() {
             localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(updatedList));
           } catch {}
         }
+
+        logUserAction(
+          userSession,
+          'ELIMINACION_ENTREGA',
+          'Entregas',
+          `Eliminación de entrega TAG ${item.tag_serial} - Vehículo Dominio: ${item.dominio}`
+        );
 
         fetchData();
       },
@@ -705,6 +729,18 @@ export default function AntigravityDashboard() {
                     <FileText className="w-3.5 h-3.5" />
                     <span>Docs & Envíos</span>
                   </button>
+
+                  <button
+                    onClick={() => setActiveTab('settings_audit')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 ${
+                      activeTab === 'settings_audit'
+                        ? 'bg-cs-primary text-white shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    <span>Auditoría</span>
+                  </button>
                 </>
               )}
             </div>
@@ -779,9 +815,14 @@ export default function AntigravityDashboard() {
           <UserManagement />
         )}
 
-        {/* VISTA 4: CONFIGURACIÓN DE DOCUMENTOS DE ACTIVACIÓN Y ENVÍOS (ADMINISTRADORES) */}
+        {/* VISTA 5: CONFIGURACIÓN DE DOCUMENTOS DE ACTIVACIÓN Y ENVÍOS (ADMINISTRADORES) */}
         {activeTab === 'settings_docs' && isAdmin && (
           <ActivationDocManagement />
+        )}
+
+        {/* VISTA 6: LOGS DE AUDITORÍA DE OPERACIONES (SOLO ADMINISTRADORES) */}
+        {activeTab === 'settings_audit' && isAdmin && (
+          <AuditLogViewer currentUser={userSession} />
         )}
 
         {/* VISTA 4: PANEL PRINCIPAL DE ENTREGAS Y STOCK */}
@@ -800,17 +841,25 @@ export default function AntigravityDashboard() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => {
-                    setSelectedSeriesStation('Todas');
-                    setIsSeriesModalOpen(true);
-                  }}
-                  className="px-3 py-1.5 bg-cs-primary hover:bg-emerald-950 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs flex-shrink-0"
-                  title="Ver el detalle completo de series y rangos de TAGs por Punto de Entrega"
-                >
-                  <Layers className="w-3.5 h-3.5 text-emerald-300" />
-                  <span>Ver Series de TAGs</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      logUserAction(
+                        userSession,
+                        'CONSULTA_SERIES_TAGS',
+                        'Series & Auditoría',
+                        'Consulta de detalle de series de TAGs por Punto de Entrega'
+                      );
+                      setSelectedSeriesStation('Todas');
+                      setIsSeriesModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-cs-primary hover:bg-emerald-950 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs flex-shrink-0"
+                    title="Ver el detalle completo de series y rangos de TAGs por Punto de Entrega (Exclusivo Administrador)"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Ver Series de TAGs</span>
+                  </button>
+                )}
               </div>
 
               {/* Selector de Período Temporal */}
@@ -951,18 +1000,26 @@ export default function AntigravityDashboard() {
                         </b>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedSeriesStation(s.estacion);
-                          setIsSeriesModalOpen(true);
-                        }}
-                        className="mt-1.5 w-full flex items-center justify-center space-x-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-cs-primary border border-emerald-200/80 rounded-lg text-[10px] font-extrabold transition"
-                        title={`Ver detalle de series de TAGs asignados a ${s.estacion}`}
-                      >
-                        <Layers className="w-3 h-3 text-emerald-600" />
-                        <span>Ver Series ({disponible.toLocaleString('es-AR')} disp.)</span>
-                      </button>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            logUserAction(
+                              userSession,
+                              'CONSULTA_SERIES_ESTACION',
+                              'Series & Auditoría',
+                              `Consulta de detalle de series de TAGs para estación: ${s.estacion}`
+                            );
+                            setSelectedSeriesStation(s.estacion);
+                            setIsSeriesModalOpen(true);
+                          }}
+                          className="mt-1.5 w-full flex items-center justify-center space-x-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-cs-primary border border-emerald-200/80 rounded-lg text-[10px] font-extrabold transition"
+                          title={`Ver detalle de series de TAGs asignados a ${s.estacion} (Exclusivo Administrador)`}
+                        >
+                          <Layers className="w-3 h-3 text-emerald-600" />
+                          <span>Ver Series ({disponible.toLocaleString('es-AR')} disp.)</span>
+                        </button>
+                      )}
                     </div>
                   );
                 })}

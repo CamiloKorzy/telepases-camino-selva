@@ -95,3 +95,16 @@ export interface TagTransfer {
   usuario_recepcion?: string;
   observaciones?: string;
 }
+
+export interface AuditLog {
+  id: string;
+  created_at: string;
+  usuario_email: string;
+  usuario_nombre: string;
+  usuario_rol: 'Administrador' | 'Operador' | 'Consulta';
+  punto_entrega?: string;
+  accion: string;
+  modulo: 'Autenticación' | 'Entregas' | 'Movimientos' | 'Alta de TAGs' | 'Usuarios' | 'Puntos de Entrega' | 'Series & Auditoría';
+  detalle: string;
+  metadata?: Record<string, any>;
+}

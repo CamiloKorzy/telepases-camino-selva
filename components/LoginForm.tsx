@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { UserProfile, UserSession } from '@/types/database';
 import { fixUserName } from '@/lib/deliveryPoints';
+import { logUserAction } from '@/lib/auditLogger';
 import { Lock, Mail, LogIn, AlertCircle, ShieldCheck } from 'lucide-react';
 
 interface LoginFormProps {
@@ -222,6 +223,12 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       };
 
       localStorage.setItem('telepase_user_session', JSON.stringify(session));
+      logUserAction(
+        session,
+        'INICIO_SESION',
+        'Autenticación',
+        `Inicio de sesión exitoso de ${session.nombre} (${session.email}) - Rol: ${session.rol}`
+      );
       onLoginSuccess(session);
     } catch (err: any) {
       setError(err.message || 'Error al iniciar sesión.');

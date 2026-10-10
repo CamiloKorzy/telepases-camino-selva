@@ -7,6 +7,7 @@ import { TagTransfer, TagBatch, UserSession } from '@/types/database';
 import { Truck, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, ArrowRight, CheckCircle, XCircle, Trash2, Plus, Trash, Layers, FileSpreadsheet, Search, Filter } from 'lucide-react';
 import { getMasterDeliveryPoints, fixUserName } from '@/lib/deliveryPoints';
 import { validateTransferOut } from '@/lib/inventoryValidation';
+import { logUserAction } from '@/lib/auditLogger';
 
 import ConfirmModal from '@/components/ConfirmModal';
 

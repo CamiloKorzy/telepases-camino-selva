@@ -6,6 +6,7 @@ import { TagBatch, UserSession } from '@/types/database';
 import { Layers, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, Edit2, Trash2, X, Plus, Trash } from 'lucide-react';
 
 import { getMasterDeliveryPoints, DEFAULT_BATCHES } from '@/lib/deliveryPoints';
+import { logUserAction } from '@/lib/auditLogger';
 import ConfirmModal from '@/components/ConfirmModal';
 
 const LOCAL_BATCHES_KEY = 'telepase_local_tag_batches';
@@ -271,6 +272,13 @@ export default function BatchManagement({ currentUser, onBatchCreated }: BatchMa
       updatedBatches = [...validPayloads, ...prevBatches];
     }
     localStorage.setItem(LOCAL_BATCHES_KEY, JSON.stringify(updatedBatches));
+
+    logUserAction(
+      currentUser,
+      editingBatch ? 'EDICION_LOTE_TAGS' : 'ALTA_LOTE_TAGS',
+      'Alta de TAGs',
+      `${editingBatch ? 'Edición de' : 'Alta de'} lote de ${validPayloads.reduce((acc, p) => acc + p.cantidad, 0).toLocaleString('es-AR')} TAGs en ${estacion} - Remito: ${numeroRemito || 'N/A'}`
+    );
 
     // Actualizar grilla local de forma inmediata (0ms de retraso)
     setBatches((prev) => {

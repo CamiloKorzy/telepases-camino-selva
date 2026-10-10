@@ -2,17 +2,18 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { TagDelivery, UserSession, TagBatch } from '@/types/database';
+import { TagDelivery, UserSession } from '@/types/database';
 import { getMasterDeliveryPoints, fixUserName } from '@/lib/deliveryPoints';
-import { validateTagDelivery, validateTagDeliveryAsync, refreshInventoryCache, getFirstAvailableTagForStation } from '@/lib/inventoryValidation';
-import { CheckCircle2, AlertCircle, Save, Car, User, Users, Truck, Copy, Plus, RefreshCw, Hash, Mail, Phone, Zap } from 'lucide-react';
+import { validateTagDelivery, refreshInventoryCache, getFirstAvailableTagForStation } from '@/lib/inventoryValidation';
+import { logUserAction } from '@/lib/auditLogger';
+import { CheckCircle2, AlertCircle, Save, Car, User, Users, Truck, Copy, Plus, RefreshCw, Hash, Mail, Phone, Zap, FileSpreadsheet } from 'lucide-react';
 
 interface DeliveryFormProps {
   currentUser: UserSession;
   onDeliverySuccess: () => void;
 }
 
-interface BulkDeliveryRow {
+interface DeliveryRow {
   id: string;
   tagSerial: string;
   dominio: string;
@@ -27,32 +28,16 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     ? currentUser.punto_entrega
     : 'Santa Ana';
 
-  // Modo de formulario: 'individual' (1 TAG) o 'masiva' (Flotas / Empresas)
-  const [mode, setMode] = useState<'individual' | 'masiva'>('individual');
-
-  // Formulario Individual
-  const [formData, setFormData] = useState<TagDelivery>({
-    estacion: defaultStation,
-    nombre_apellido: '',
-    dni_cuit: '',
-    dominio: '',
-    tag_serial: '',
-    operador_runner: currentUser.nombre || currentUser.email,
-    observaciones: '',
-    email_contacto: '',
-    celular_contacto: '',
-  });
-
-  // Formulario Masivo (Flotas / Empresas)
-  const [bulkStation, setBulkStation] = useState<string>(defaultStation);
+  // Configuración Unificada de Entrega (Default: 1 TAG)
+  const [station, setStation] = useState<string>(defaultStation);
   const [startSerial, setStartSerial] = useState<string>('');
-  const [bulkQuantity, setBulkQuantity] = useState<number>(5);
+  const [quantity, setQuantity] = useState<number>(1); // DEFAULT ES 1 TAG
   const [sharedDniCuit, setSharedDniCuit] = useState<string>('');
   const [sharedNombre, setSharedNombre] = useState<string>('');
   const [sharedEmail, setSharedEmail] = useState<string>('');
   const [sharedCelular, setSharedCelular] = useState<string>('');
-  const [bulkObservaciones, setBulkObservaciones] = useState<string>('');
-  const [bulkRows, setBulkRows] = useState<BulkDeliveryRow[]>([]);
+  const [observaciones, setObservaciones] = useState<string>('');
+  const [rows, setRows] = useState<DeliveryRow[]>([]);
 
   const [deliveryPoints, setDeliveryPoints] = useState<string[]>([
     'Santa Ana',
@@ -61,6 +46,10 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     'Ituzaingó',
   ]);
 
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Cargar Puntos de Entrega y auto-sugerir primer disponible
   useEffect(() => {
     const loadPoints = async () => {
       await refreshInventoryCache();
@@ -71,16 +60,10 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       const assignedPoint = currentUser.punto_entrega && currentUser.punto_entrega !== 'Todos'
         ? currentUser.punto_entrega
         : names[0] || 'Santa Ana';
-      
-      const suggestedTag = getFirstAvailableTagForStation(assignedPoint);
 
-      setFormData((prev) => ({
-        ...prev,
-        estacion: assignedPoint,
-        tag_serial: prev.tag_serial || suggestedTag || '',
-      }));
-      setBulkStation(assignedPoint);
-      setStartSerial((prev) => prev || suggestedTag || '');
+      setStation(assignedPoint);
+      const suggestedTag = getFirstAvailableTagForStation(assignedPoint);
+      setStartSerial(suggestedTag || '');
     };
 
     loadPoints();
@@ -90,44 +73,35 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     return () => window.removeEventListener('delivery_points_updated', handleUpdated);
   }, [currentUser]);
 
-  // Auto-sugerir el primer TAG disponible en stock al cambiar de Punto de Entrega o Modo
+  // Actualizar primer disponible cuando cambia la estación seleccionada
   useEffect(() => {
-    if (mode === 'individual') {
-      const suggested = getFirstAvailableTagForStation(formData.estacion);
-      if (suggested) {
-        setFormData((prev) => ({ ...prev, tag_serial: suggested }));
-      }
-    } else if (mode === 'masiva') {
-      const suggested = getFirstAvailableTagForStation(bulkStation);
-      if (suggested) {
-        setStartSerial(suggested);
-      }
+    const suggested = getFirstAvailableTagForStation(station);
+    if (suggested) {
+      setStartSerial(suggested);
     }
-  }, [formData.estacion, bulkStation, mode]);
+  }, [station]);
 
-  // Generación automática de filas masivas al cambiar Serial Inicial o Cantidad (omitimos automáticamente los ya entregados o sin stock)
+  // Generación dinámica de filas según Serial Inicial y Cantidad (Default: 1 fila)
   useEffect(() => {
-    if (mode !== 'masiva') return;
-
     const cleanStart = startSerial.trim().toUpperCase();
-    const count = Math.max(1, Math.min(bulkQuantity || 1, 100));
+    const count = Math.max(1, Math.min(quantity || 1, 100));
 
     if (!cleanStart) {
-      setBulkRows([]);
+      setRows([]);
       return;
     }
 
     const numMatch = cleanStart.match(/\d+/);
     if (!numMatch) {
-      setBulkRows(
+      setRows(
         Array.from({ length: count }, (_, i) => ({
           id: String(i + 1),
           tagSerial: `${cleanStart}-${i + 1}`,
-          dominio: bulkRows[i]?.dominio || '',
-          dniCuit: bulkRows[i]?.dniCuit || sharedDniCuit,
-          nombre: bulkRows[i]?.nombre || sharedNombre,
-          emailContacto: bulkRows[i]?.emailContacto || sharedEmail,
-          celularContacto: bulkRows[i]?.celularContacto || sharedCelular,
+          dominio: rows[i]?.dominio || '',
+          dniCuit: rows[i]?.dniCuit || sharedDniCuit,
+          nombre: rows[i]?.nombre || sharedNombre,
+          emailContacto: rows[i]?.emailContacto || sharedEmail,
+          celularContacto: rows[i]?.celularContacto || sharedCelular,
         }))
       );
       return;
@@ -138,7 +112,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     const padLen = numStr.length;
     const startNum = parseInt(numStr, 10);
 
-    const newRows: BulkDeliveryRow[] = [];
+    const newRows: DeliveryRow[] = [];
     let currentNum = startNum;
     let foundCount = 0;
     let iterations = 0;
@@ -146,19 +120,18 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
     while (foundCount < count && iterations < maxIterations) {
       const serialFormatted = `${prefix}${String(currentNum).padStart(padLen, '0')}`;
-      const val = validateTagDelivery(bulkStation, serialFormatted);
+      const val = validateTagDelivery(station, serialFormatted);
 
-      // Si el TAG está disponible en la estación y NO fue entregado previa ni actualmente, agregarlo a la sugerencia
       if (val.valid) {
         const existingIdx = foundCount;
         newRows.push({
           id: String(foundCount + 1),
           tagSerial: serialFormatted,
-          dominio: bulkRows[existingIdx]?.dominio || '',
-          dniCuit: bulkRows[existingIdx]?.dniCuit || sharedDniCuit,
-          nombre: bulkRows[existingIdx]?.nombre || sharedNombre,
-          emailContacto: bulkRows[existingIdx]?.emailContacto || sharedEmail,
-          celularContacto: bulkRows[existingIdx]?.celularContacto || sharedCelular,
+          dominio: rows[existingIdx]?.dominio || '',
+          dniCuit: rows[existingIdx]?.dniCuit || sharedDniCuit,
+          nombre: rows[existingIdx]?.nombre || sharedNombre,
+          emailContacto: rows[existingIdx]?.emailContacto || sharedEmail,
+          celularContacto: rows[existingIdx]?.celularContacto || sharedCelular,
         });
         foundCount++;
       }
@@ -166,7 +139,6 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       iterations++;
     }
 
-    // Fallback de seguridad si no se hallaron suficientes disponibles continuos
     if (foundCount < count) {
       for (let i = foundCount; i < count; i++) {
         const fallbackNum = startNum + i;
@@ -174,288 +146,108 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
         newRows.push({
           id: String(i + 1),
           tagSerial: serialFormatted,
-          dominio: bulkRows[i]?.dominio || '',
-          dniCuit: bulkRows[i]?.dniCuit || sharedDniCuit,
-          nombre: bulkRows[i]?.nombre || sharedNombre,
-          emailContacto: bulkRows[i]?.emailContacto || sharedEmail,
-          celularContacto: bulkRows[i]?.celularContacto || sharedCelular,
+          dominio: rows[i]?.dominio || '',
+          dniCuit: rows[i]?.dniCuit || sharedDniCuit,
+          nombre: rows[i]?.nombre || sharedNombre,
+          emailContacto: rows[i]?.emailContacto || sharedEmail,
+          celularContacto: rows[i]?.celularContacto || sharedCelular,
         });
       }
     }
 
-    setBulkRows(newRows);
-  }, [startSerial, bulkQuantity, bulkStation, mode]);
+    setRows(newRows);
+  }, [startSerial, quantity, station]);
 
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: name === 'dominio' ? value.toUpperCase().replace(/\s/g, '') : value,
-    }));
-  };
-
-  const handleBulkRowChange = (id: string, field: keyof BulkDeliveryRow, value: string) => {
-    setBulkRows((prev) =>
+  const handleRowChange = (id: string, field: keyof DeliveryRow, val: string) => {
+    setRows((prev) =>
       prev.map((r) => {
         if (r.id !== id) return r;
-        return {
-          ...r,
-          [field]: field === 'dominio' ? value.toUpperCase().replace(/\s/g, '') : value,
-        };
+        let finalVal = val;
+        if (field === 'dominio') finalVal = val.toUpperCase().replace(/\s/g, '');
+        if (field === 'tagSerial') finalVal = val.toUpperCase().trim();
+        return { ...r, [field]: finalVal };
       })
     );
   };
 
-  const replicateDniCuit = () => {
-    const targetDni = sharedDniCuit.trim() || (bulkRows[0]?.dniCuit.trim() || '');
-    if (!targetDni) return;
-    setSharedDniCuit(targetDni);
-    setBulkRows((prev) => prev.map((r) => ({ ...r, dniCuit: targetDni })));
+  const handleReplicateHeaderDni = () => {
+    if (!sharedDniCuit.trim()) return;
+    setRows((prev) => prev.map((r) => ({ ...r, dniCuit: sharedDniCuit.trim() })));
   };
 
-  const replicateNombre = () => {
-    const targetNombre = sharedNombre.trim() || (bulkRows[0]?.nombre.trim() || '');
-    if (!targetNombre) return;
-    setSharedNombre(targetNombre);
-    setBulkRows((prev) => prev.map((r) => ({ ...r, nombre: targetNombre })));
+  const handleReplicateHeaderNombre = () => {
+    if (!sharedNombre.trim()) return;
+    setRows((prev) => prev.map((r) => ({ ...r, nombre: sharedNombre.trim() })));
   };
 
-  const replicateEmail = () => {
-    const targetEmail = sharedEmail.trim() || (bulkRows[0]?.emailContacto?.trim() || '');
-    if (!targetEmail) return;
-    setSharedEmail(targetEmail);
-    setBulkRows((prev) => prev.map((r) => ({ ...r, emailContacto: targetEmail })));
+  const handleReplicateHeaderEmail = () => {
+    if (!sharedEmail.trim()) return;
+    setRows((prev) => prev.map((r) => ({ ...r, emailContacto: sharedEmail.trim() })));
   };
 
-  const replicateCelular = () => {
-    const targetCelular = sharedCelular.trim() || (bulkRows[0]?.celularContacto?.trim() || '');
-    if (!targetCelular) return;
-    setSharedCelular(targetCelular);
-    setBulkRows((prev) => prev.map((r) => ({ ...r, celularContacto: targetCelular })));
+  const handleReplicateHeaderCelular = () => {
+    if (!sharedCelular.trim()) return;
+    setRows((prev) => prev.map((r) => ({ ...r, celularContacto: sharedCelular.trim() })));
   };
 
-  const replicateFromFirstRow = () => {
-    if (bulkRows.length === 0) return;
-    const firstDni = bulkRows[0].dniCuit.trim() || sharedDniCuit.trim();
-    const firstNombre = bulkRows[0].nombre.trim() || sharedNombre.trim();
-    const firstEmail = bulkRows[0].emailContacto?.trim() || sharedEmail.trim();
-    const firstCelular = bulkRows[0].celularContacto?.trim() || sharedCelular.trim();
-
-    if (firstDni) setSharedDniCuit(firstDni);
-    if (firstNombre) setSharedNombre(firstNombre);
-    if (firstEmail) setSharedEmail(firstEmail);
-    if (firstCelular) setSharedCelular(firstCelular);
-
-    setBulkRows((prev) =>
-      prev.map((r) => ({
-        ...r,
-        dniCuit: firstDni || r.dniCuit,
-        nombre: firstNombre || r.nombre,
-        emailContacto: firstEmail || r.emailContacto,
-        celularContacto: firstCelular || r.celularContacto,
-      }))
-    );
-  };
-
-  const generateSequentialPlates = () => {
-    if (bulkRows.length === 0) return;
-    const firstDom = bulkRows[0]?.dominio.trim().toUpperCase();
-    if (!firstDom) return;
-
-    const numMatch = firstDom.match(/\d+/);
-    if (!numMatch) return;
-
-    const numStr = numMatch[0];
-    const prefix = firstDom.substring(0, firstDom.indexOf(numStr));
-    const suffix = firstDom.substring(firstDom.indexOf(numStr) + numStr.length);
-    const padLen = numStr.length;
-    const startNum = parseInt(numStr, 10);
-
-    setBulkRows((prev) =>
-      prev.map((r, i) => {
-        const nextNum = startNum + i;
-        const nextNumStr = String(nextNum).padStart(padLen, '0');
-        return {
-          ...r,
-          dominio: `${prefix}${nextNumStr}${suffix}`,
-        };
-      })
-    );
-  };
-
-  // Validaciones en tiempo real para modo individual y masivo
-  const singleTagValidation = formData.tag_serial.trim()
-    ? validateTagDelivery(formData.estacion, formData.tag_serial)
-    : null;
-
-  const bulkInvalidRowsCount = bulkRows.filter(
-    (r) => r.tagSerial.trim() && !validateTagDelivery(bulkStation, r.tagSerial).valid
-  ).length;
-
-  const bulkIncompleteRowsCount = bulkRows.filter(
-    (r) => !r.tagSerial.trim() || !r.dominio.trim() || !(r.dniCuit || sharedDniCuit).trim()
-  ).length;
-
-  const handleSubmitIndividual = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
 
-    const tagClean = formData.tag_serial.trim().toUpperCase();
-
-    if (!formData.estacion || deliveryPoints.length === 0) {
-      setMessage({ type: 'error', text: 'Debe dar de alta al menos un Punto de Entrega en la pestaña "Puntos de Entrega" antes de registrar entregas.' });
+    if (!startSerial.trim()) {
+      setMessage({ type: 'error', text: 'Debe ingresar o seleccionar el Número de Serie TAG RFID.' });
       setLoading(false);
       return;
     }
 
-    if (!formData.dominio || !formData.dni_cuit || !tagClean) {
-      setMessage({ type: 'error', text: 'Por favor completá los datos obligatorios: Dominio, DNI/CUIT y TAG.' });
+    if (rows.length === 0) {
+      setMessage({ type: 'error', text: 'No hay filas de vehículos para registrar la entrega.' });
       setLoading(false);
       return;
     }
 
-    const valRes = await validateTagDeliveryAsync(formData.estacion, tagClean);
-    if (!valRes.valid) {
+    // Validar que cada fila tenga Dominio y DNI/CUIT cargados
+    const invalidRow = rows.find((r) => !r.dominio.trim() || !(r.dniCuit.trim() || sharedDniCuit.trim()));
+    if (invalidRow) {
       setMessage({
         type: 'error',
-        text: valRes.error || `El TAG "${tagClean}" no está disponible en ${formData.estacion}.`,
+        text: `Fila #${invalidRow.id}: Dominio / Patente y DNI / CUIT son obligatorios para guardar la entrega.`,
       });
       setLoading(false);
       return;
     }
 
-    const payload: TagDelivery = {
-      ...formData,
-      tag_serial: tagClean,
-      id: crypto.randomUUID(),
-      created_at: new Date().toISOString(),
-      operador_runner: currentUser.nombre || currentUser.email,
-    };
-
-    try {
-      const { error } = await supabase.from('tag_deliveries').insert([payload]);
-      if (error) {
-        if (error.code === '23505') {
-          throw new Error(`El número de TAG "${tagClean}" ya fue entregado previamente.`);
-        }
-        console.warn('Supabase no disponible, registrando localmente:', error.message);
-      }
-    } catch (err: any) {
-      if (err.message && err.message.includes('ya fue entregado')) {
-        setMessage({ type: 'error', text: err.message });
+    // Validar disponibilidad de cada TAG
+    for (const r of rows) {
+      const val = validateTagDelivery(station, r.tagSerial);
+      if (!val.valid) {
+        setMessage({ type: 'error', text: `TAG ${r.tagSerial}: ${val.error}` });
         setLoading(false);
         return;
       }
     }
 
-    const storedDeliveries = localStorage.getItem('telepase_local_tag_deliveries');
-    const prevDeliveries: TagDelivery[] = storedDeliveries ? JSON.parse(storedDeliveries) : [];
-    const updatedDeliveries = [payload, ...prevDeliveries];
-    localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(updatedDeliveries));
-
-    setMessage({ type: 'success', text: `¡TAG ${tagClean} registrado exitosamente para ${formData.dominio}!` });
-    
-    const nextSuggested = getFirstAvailableTagForStation(formData.estacion);
-    setFormData((prev) => ({
-      ...prev,
-      nombre_apellido: '',
-      dni_cuit: '',
-      dominio: '',
-      tag_serial: nextSuggested || '',
-      observaciones: '',
-      email_contacto: '',
-      celular_contacto: '',
-    }));
-
-    setLoading(false);
-    onDeliverySuccess();
-  };
-
-  const handleSubmitMasivo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
-
-    if (bulkRows.length === 0) {
-      setMessage({ type: 'error', text: 'Debe ingresar un primer número de TAG válido y una cantidad mayor a 0.' });
-      setLoading(false);
-      return;
-    }
-
-    // Refrescar caché de inventario antes de guardar
-    await refreshInventoryCache();
-
-    // Validar cada fila strictly
-    const serialSet = new Set<string>();
-    const payloads: TagDelivery[] = [];
     const timestamp = new Date().toISOString();
-
-    for (let i = 0; i < bulkRows.length; i++) {
-      const row = bulkRows[i];
-      const serialClean = row.tagSerial.trim().toUpperCase();
-      const domClean = row.dominio.trim().toUpperCase().replace(/\s/g, '');
-      const dniClean = (row.dniCuit || sharedDniCuit).trim();
-      const nomClean = (row.nombre || sharedNombre).trim();
-      const emailClean = (row.emailContacto || sharedEmail).trim();
-      const celClean = (row.celularContacto || sharedCelular).trim();
-
-      if (!serialClean) {
-        setMessage({ type: 'error', text: `Fila #${i + 1}: Debe especificar el número de TAG.` });
-        setLoading(false);
-        return;
-      }
-
-      if (!domClean) {
-        setMessage({ type: 'error', text: `Fila #${i + 1} (${serialClean}): Debe ingresar el Dominio / Patente del vehículo.` });
-        setLoading(false);
-        return;
-      }
-
-      if (!dniClean) {
-        setMessage({ type: 'error', text: `Fila #${i + 1} (${serialClean}): Debe ingresar el DNI o CUIT.` });
-        setLoading(false);
-        return;
-      }
-
-      if (serialSet.has(serialClean)) {
-        setMessage({ type: 'error', text: `El TAG "${serialClean}" está duplicado dentro de esta misma carga masiva.` });
-        setLoading(false);
-        return;
-      }
-      serialSet.add(serialClean);
-
-      // Validar disponibilidad de stock en inventario
-      const valRes = validateTagDelivery(bulkStation, serialClean);
-      if (!valRes.valid) {
-        setMessage({ type: 'error', text: `Fila #${i + 1}: ${valRes.error}` });
-        setLoading(false);
-        return;
-      }
-
-      payloads.push({
-        id: crypto.randomUUID(),
-        created_at: timestamp,
-        estacion: bulkStation,
-        tag_serial: serialClean,
-        dominio: domClean,
-        dni_cuit: dniClean,
-        nombre_apellido: nomClean,
-        email_contacto: emailClean,
-        celular_contacto: celClean,
-        operador_runner: currentUser.nombre || currentUser.email,
-        observaciones: bulkObservaciones.trim(),
-      });
-    }
+    const payloads: TagDelivery[] = rows.map((r) => ({
+      id: crypto.randomUUID(),
+      created_at: timestamp,
+      estacion: station,
+      tag_serial: r.tagSerial.toUpperCase().trim(),
+      dominio: r.dominio.toUpperCase().trim(),
+      dni_cuit: (r.dniCuit || sharedDniCuit).trim(),
+      nombre_apellido: (r.nombre || sharedNombre).trim(),
+      email_contacto: (r.emailContacto || sharedEmail).trim(),
+      celular_contacto: (r.celularContacto || sharedCelular).trim(),
+      operador_runner: currentUser.nombre || currentUser.email,
+      observaciones: observaciones.trim(),
+    }));
 
     // Guardar en Supabase
     try {
       await supabase.from('tag_deliveries').insert(payloads);
     } catch (err: any) {
-      console.warn('Error registrando entrega masiva en Supabase:', err);
+      console.warn('Error en Supabase, guardando localmente:', err);
     }
 
     // Guardar en LocalStorage
@@ -464,736 +256,404 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     const updatedDeliveries = [...payloads, ...prevDeliveries];
     localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(updatedDeliveries));
 
+    // Registrar en Log de Auditoría
+    const accionTxt = payloads.length === 1 ? 'ENTREGA_INDIVIDUAL_TAG' : 'ENTREGA_MASIVA_TAGS';
+    const detalleTxt =
+      payloads.length === 1
+        ? `Entrega de TAG ${payloads[0].tag_serial} a Vehículo Dominio ${payloads[0].dominio} (DNI/CUIT: ${payloads[0].dni_cuit}) en ${station}`
+        : `Entrega Masiva de ${payloads.length} TAGs a ${sharedNombre || 'la flota'} (DNI/CUIT: ${sharedDniCuit || 'N/A'}) en ${station}`;
+
+    logUserAction(currentUser, accionTxt, 'Entregas', detalleTxt);
+
     setMessage({
       type: 'success',
-      text: `¡Entrega Masiva de ${payloads.length} TAGs registrada exitosamente para ${sharedNombre || 'la flota'}!`,
+      text: `¡Entrega de ${payloads.length} TAG${payloads.length > 1 ? 's' : ''} registrada exitosamente en ${station}!`,
     });
 
-    // Resetear formulario masivo con el siguiente disponible
-    const nextSuggested = getFirstAvailableTagForStation(bulkStation);
+    // Resetear formulario con el siguiente TAG disponible
+    const nextSuggested = getFirstAvailableTagForStation(station);
     setStartSerial(nextSuggested || '');
-    setBulkQuantity(5);
+    setQuantity(1); // MANTENER DEFAULT EN 1
     setSharedDniCuit('');
     setSharedNombre('');
     setSharedEmail('');
     setSharedCelular('');
-    setBulkObservaciones('');
-    setBulkRows([]);
-
+    setObservaciones('');
     setLoading(false);
+
     onDeliverySuccess();
   };
 
-  const isPointLocked =
-    currentUser.rol === 'Operador' &&
-    !!currentUser.punto_entrega &&
-    currentUser.punto_entrega !== 'Todos';
+  const isFormValid =
+    rows.length > 0 &&
+    rows.every((r) => r.dominio.trim().length >= 3 && (r.dniCuit.trim().length >= 5 || sharedDniCuit.trim().length >= 5));
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-      {/* Header del Formulario y Selector de Modo */}
-      <div className="bg-cs-dark text-white p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Car className="w-5 h-5 text-cs-accent" />
-            <h2 className="font-bold text-base">Registro de Entrega en Vía</h2>
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+      {/* Encabezado del Formulario */}
+      <div className="bg-cs-primary text-white p-4 px-6 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="p-2 bg-white/10 rounded-xl">
+            <Car className="w-5 h-5 text-emerald-300" />
           </div>
-          <div className="flex items-center space-x-1.5 text-xs bg-white/10 text-emerald-200 px-3 py-1 rounded-full border border-white/15">
-            <User className="w-3.5 h-3.5 text-cs-accent" />
-            <span className="font-semibold">{fixUserName(currentUser.nombre)}</span>
+          <div>
+            <h2 className="text-base font-bold">Registro de Entrega en Vía</h2>
+            <p className="text-xs text-emerald-100">
+              Entrega directa de TAGs TelePASE por vehículo o flota en estación
+            </p>
           </div>
         </div>
 
-        {/* Pestañas de Modo: Individual vs Masiva */}
-        <div className="flex items-center space-x-2 bg-slate-900/60 p-1 rounded-xl border border-white/10 text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => setMode('individual')}
-            className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center space-x-1.5 ${
-              mode === 'individual'
-                ? 'bg-cs-primary text-white shadow-sm'
-                : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            <Car className="w-3.5 h-3.5" />
-            <span>Entrega Individual (1 TAG)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setMode('masiva')}
-            className={`flex-1 py-1.5 rounded-lg transition flex items-center justify-center space-x-1.5 ${
-              mode === 'masiva'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-slate-300 hover:text-white'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Entrega Masiva (Flotas / Empresas)</span>
-            <span className="text-[9px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded uppercase">
-              Nuevo
-            </span>
-          </button>
+        <div className="flex items-center space-x-2 bg-white/10 px-3 py-1.5 rounded-xl border border-white/20 text-xs">
+          <User className="w-3.5 h-3.5 text-emerald-300" />
+          <span className="font-bold">{currentUser.nombre || currentUser.email}</span>
         </div>
       </div>
 
-      <div className="p-5 space-y-4">
-        {/* Mensajes de notificación */}
-        {currentUser.rol === 'Consulta' && (
-          <div className="p-3 bg-sky-50 border border-sky-200 text-sky-900 text-xs font-bold rounded-xl flex items-center space-x-2">
-            <AlertCircle className="w-5 h-5 text-sky-600 flex-shrink-0" />
-            <span>MODO SOLO LECTURA: Su usuario Auditor / Consulta de Inventarios no tiene permisos para registrar entregas de TAGs.</span>
-          </div>
-        )}
-
+      <form onSubmit={handleSubmit} className="p-5 space-y-5">
         {message && (
           <div
-            className={`p-3 rounded-xl flex items-center space-x-2 text-sm font-medium ${
+            className={`p-3.5 rounded-xl text-xs font-semibold flex items-center space-x-2 border animate-in fade-in duration-150 ${
               message.type === 'success'
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                : 'bg-rose-50 text-rose-800 border border-rose-200'
+                ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                : 'bg-rose-50 text-rose-900 border-rose-300'
             }`}
           >
             {message.type === 'success' ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-cs-primary flex-shrink-0" />
             ) : (
-              <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />
+              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
             )}
             <span>{message.text}</span>
           </div>
         )}
 
-        {/* 1. MODO ENTREGA INDIVIDUAL (1 TAG) */}
-        {mode === 'individual' && (
-          <form onSubmit={handleSubmitIndividual} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Punto de Entrega */}
-              <div>
-                <label className="block text-xs font-bold text-cs-primary uppercase mb-1">1. Punto de Entrega *</label>
-                <select
-                  name="estacion"
-                  value={formData.estacion}
-                  onChange={handleChange}
-                  disabled={isPointLocked || deliveryPoints.length === 0}
-                  className={`w-full p-3 rounded-xl border font-semibold text-slate-800 ${
-                    isPointLocked || deliveryPoints.length === 0
-                      ? 'bg-slate-100 border-slate-200 cursor-not-allowed text-slate-600'
-                      : 'bg-slate-50 border-slate-300 focus:ring-2 focus:ring-cs-primary focus:outline-none'
-                  }`}
-                >
-                  {deliveryPoints.length === 0 ? (
-                    <option value="">No hay Puntos de Entrega registrados</option>
-                  ) : (
-                    deliveryPoints.map((pt) => (
-                      <option key={pt} value={pt}>
-                        {pt}
-                      </option>
-                    ))
-                  )}
-                </select>
-                {isPointLocked && (
-                  <p className="text-[11px] text-amber-700 font-medium mt-1">
-                    Punto de entrega fijo para su perfil de Operador.
-                  </p>
-                )}
-              </div>
-
-              {/* Nº Serie TAG RFID */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-cs-primary uppercase">2. Nº Serie TAG RFID *</label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const first = getFirstAvailableTagForStation(formData.estacion);
-                      if (first) setFormData((prev) => ({ ...prev, tag_serial: first }));
-                    }}
-                    className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5"
-                    title="Sugerir el primer TAG disponible en stock para esta estación"
-                  >
-                    <Zap className="w-3 h-3 text-emerald-600" />
-                    <span>Primer Disponible</span>
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  name="tag_serial"
-                  value={formData.tag_serial}
-                  onChange={handleChange}
-                  placeholder="Ingresar número de serie TAG RFID"
-                  className={`w-full p-3 rounded-xl border-2 font-mono font-bold tracking-wider bg-cs-primary/5 focus:ring-2 focus:outline-none uppercase ${
-                    singleTagValidation
-                      ? singleTagValidation.valid
-                        ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500'
-                        : 'border-rose-500 text-rose-950 focus:ring-rose-500'
-                      : 'border-cs-primary/60 text-cs-dark focus:ring-cs-primary'
-                  }`}
-                  required
-                />
-                {singleTagValidation && (
-                  <div className={`text-[11px] font-bold mt-1.5 flex items-start space-x-1 ${
-                    singleTagValidation.valid ? 'text-emerald-700' : 'text-rose-700'
-                  }`}>
-                    {singleTagValidation.valid ? (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" />
-                        <span>TAG disponible en stock de {formData.estacion}</span>
-                      </>
-                    ) : (
-                      <>
-                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0 mt-0.5" />
-                        <span>{singleTagValidation.error}</span>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Dominio / Patente (OBLIGATORIO) */}
-              <div>
-                <label className="block text-xs font-bold text-cs-primary uppercase mb-1">3. Dominio / Patente *</label>
-                <input
-                  type="text"
-                  name="dominio"
-                  value={formData.dominio}
-                  onChange={handleChange}
-                  placeholder="AA123CD o AAA123"
-                  maxLength={8}
-                  className="w-full p-3 rounded-xl border border-slate-300 font-mono font-bold text-slate-900 tracking-wider focus:ring-2 focus:ring-cs-primary focus:outline-none uppercase"
-                  required
-                />
-              </div>
-
-              {/* DNI / CUIT (OBLIGATORIO) */}
-              <div>
-                <label className="block text-xs font-bold text-cs-primary uppercase mb-1">4. DNI / CUIT *</label>
-                <input
-                  type="text"
-                  name="dni_cuit"
-                  value={formData.dni_cuit}
-                  onChange={handleChange}
-                  placeholder="Sin puntos ni guiones (ej. 30123456)"
-                  className="w-full p-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-cs-primary focus:outline-none font-medium"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Nombre y Apellido (Opcional) */}
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Nombre y Apellido Receptor (Opcional)</label>
-              <input
-                type="text"
-                name="nombre_apellido"
-                value={formData.nombre_apellido || ''}
-                onChange={handleChange}
-                placeholder="Juan Pérez"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-cs-primary focus:outline-none"
-              />
-            </div>
-
-            {/* Email y Celular de Contacto (Opcionales - Para envío de Folleto / Activación) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-sky-50/50 p-3.5 rounded-xl border border-sky-100">
-              <div>
-                <label className="block text-[11px] font-bold text-sky-900 uppercase mb-1 flex items-center space-x-1">
-                  <Mail className="w-3.5 h-3.5 text-sky-600" />
-                  <span>Email de Contacto (Opcional - Envío Folleto)</span>
-                </label>
-                <input
-                  type="email"
-                  name="email_contacto"
-                  value={formData.email_contacto || ''}
-                  onChange={handleChange}
-                  placeholder="ej. cliente@email.com"
-                  className="w-full p-2.5 rounded-xl border border-sky-200 bg-white text-xs text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-sky-900 uppercase mb-1 flex items-center space-x-1">
-                  <Phone className="w-3.5 h-3.5 text-sky-600" />
-                  <span>Celular / WhatsApp (Opcional - Activación)</span>
-                </label>
-                <input
-                  type="tel"
-                  name="celular_contacto"
-                  value={formData.celular_contacto || ''}
-                  onChange={handleChange}
-                  placeholder="ej. 3764123456"
-                  className="w-full p-2.5 rounded-xl border border-sky-200 bg-white text-xs text-slate-800 focus:ring-2 focus:ring-sky-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Observaciones */}
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Observaciones (Opcional)</label>
-              <input
-                type="text"
-                name="observaciones"
-                value={formData.observaciones}
-                onChange={handleChange}
-                placeholder="Ej. Vehículo Oficial, Transporte Pesado, etc."
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-cs-primary focus:outline-none"
-              />
-            </div>
-
-            {/* Botón de Envío */}
-            <button
-              type="submit"
-              disabled={loading || currentUser.rol === 'Consulta' || (singleTagValidation !== null && !singleTagValidation.valid)}
-              className="w-full py-4 bg-cs-primary hover:bg-cs-dark active:bg-cs-dark/90 text-white font-bold text-base rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50"
-            >
-              <Save className="w-5 h-5" />
-              <span>
-                {currentUser.rol === 'Consulta'
-                  ? 'SOLO LECTURA (REGISTRO DESHABILITADO)'
-                  : loading
-                  ? 'Registrando en Vía...'
-                  : 'GUARDAR Y REGISTRAR ENTREGA'}
+        {/* 1. CONFIGURACIÓN PRINCIPAL DE ENTREGA */}
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <div className="flex items-center space-x-2">
+              <span className="text-cs-primary font-bold text-xs uppercase tracking-wider">
+                1. DATOS DE ENTREGA Y STOCK
               </span>
-            </button>
-          </form>
-        )}
+            </div>
+            <span className="text-[10px] text-slate-400 font-medium">Generación de series y asignación</span>
+          </div>
 
-        {/* 2. MODO ENTREGA MASIVA (FLOTAS / EMPRESAS DE TRANSPORTE) */}
-        {mode === 'masiva' && (
-          <form onSubmit={handleSubmitMasivo} className="space-y-4">
-            {/* 1. Datos Principales de la Empresa / Flota */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-800 uppercase tracking-wide flex items-center space-x-1">
-                  <Truck className="w-4 h-4 text-emerald-600" />
-                  <span>1. Configuración de Flota / Empresa</span>
-                </span>
-                <span className="text-[10px] text-slate-500 font-semibold">
-                  Generación automática de series consecutivas
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                {/* Punto de Entrega */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Punto de Entrega *</label>
-                  <select
-                    value={bulkStation}
-                    onChange={(e) => setBulkStation(e.target.value)}
-                    disabled={isPointLocked || deliveryPoints.length === 0}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 font-semibold text-xs text-slate-800 bg-white"
-                  >
-                    {deliveryPoints.map((pt) => (
-                      <option key={`blk_${pt}`} value={pt}>
-                        {pt}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Primer TAG Serial */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-bold text-emerald-800 uppercase">Primer Nº Serie TAG *</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const first = getFirstAvailableTagForStation(bulkStation);
-                        if (first) setStartSerial(first);
-                      }}
-                      className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5"
-                      title="Sugerir el primer TAG disponible en stock para esta estación"
-                    >
-                      <Zap className="w-3 h-3 text-emerald-600" />
-                      <span>Primer Disponible</span>
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={startSerial}
-                    onChange={(e) => setStartSerial(e.target.value)}
-                    placeholder="ej. 63228500"
-                    className={`w-full p-2.5 rounded-xl border-2 font-mono font-bold text-xs bg-white uppercase focus:ring-2 focus:outline-none ${
-                      startSerial.trim()
-                        ? bulkInvalidRowsCount === 0
-                          ? 'border-emerald-500 text-emerald-950 focus:ring-emerald-500'
-                          : 'border-rose-500 text-rose-950 focus:ring-rose-500'
-                        : 'border-emerald-400 text-emerald-950 focus:ring-emerald-500'
-                    }`}
-                    required
-                  />
-                  {startSerial.trim() && (
-                    <div className={`text-[10px] font-bold mt-1 flex items-center space-x-1 ${
-                      bulkInvalidRowsCount === 0 ? 'text-emerald-700' : 'text-rose-700'
-                    }`}>
-                      {bulkInvalidRowsCount === 0 ? (
-                        <>
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
-                          <span>Serie en stock ({bulkRows.length} TAGs OK)</span>
-                        </>
-                      ) : (
-                        <>
-                          <AlertCircle className="w-3 h-3 text-rose-600 flex-shrink-0" />
-                          <span>⛔ {bulkInvalidRowsCount} de {bulkRows.length} TAGs sin stock en {bulkStation}</span>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Cantidad de TAGs */}
-                <div>
-                  <label className="block text-[11px] font-bold text-emerald-800 uppercase mb-1">Cantidad de TAGs *</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={bulkQuantity}
-                    onChange={(e) => setBulkQuantity(parseInt(e.target.value, 10) || 1)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 font-mono font-bold text-xs bg-white text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    required
-                  />
-                </div>
-
-                {/* DNI / CUIT Empresa */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase">CUIT / DNI Empresa *</label>
-                    <button
-                      type="button"
-                      onClick={replicateDniCuit}
-                      className="text-[10px] text-emerald-700 font-bold hover:underline flex items-center space-x-0.5"
-                      title="Replicar CUIT a todos los vehículos de la lista"
-                    >
-                      <Copy className="w-3 h-3" />
-                      <span>Replicar</span>
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={sharedDniCuit}
-                    onChange={(e) => setSharedDniCuit(e.target.value)}
-                    placeholder="ej. 30712345678"
-                    className="w-full p-2.5 rounded-xl border border-slate-300 font-medium text-xs bg-white text-slate-900"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                {/* Nombre Empresa */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase">Razón Social / Empresa (Opcional)</label>
-                    <button
-                      type="button"
-                      onClick={replicateNombre}
-                      className="text-[10px] text-emerald-700 font-bold hover:underline flex items-center space-x-0.5"
-                      title="Replicar Nombre a todos los registros"
-                    >
-                      <Copy className="w-3 h-3" />
-                      <span>Replicar</span>
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={sharedNombre}
-                    onChange={(e) => setSharedNombre(e.target.value)}
-                    placeholder="ej. Transportes Misiones S.R.L. / Línea 05"
-                    className="w-full p-2.5 rounded-xl border border-slate-300 font-medium text-xs bg-white text-slate-900"
-                  />
-                </div>
-
-                {/* Email Empresa */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-bold text-sky-900 uppercase flex items-center space-x-1">
-                      <Mail className="w-3 h-3 text-sky-600" />
-                      <span>Email Contacto (Opcional)</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={replicateEmail}
-                      className="text-[10px] text-sky-700 font-bold hover:underline flex items-center space-x-0.5"
-                      title="Replicar Email a todos los registros"
-                    >
-                      <Copy className="w-3 h-3" />
-                      <span>Replicar</span>
-                    </button>
-                  </div>
-                  <input
-                    type="email"
-                    value={sharedEmail}
-                    onChange={(e) => setSharedEmail(e.target.value)}
-                    placeholder="ej. flota@empresa.com"
-                    className="w-full p-2.5 rounded-xl border border-sky-200 font-medium text-xs bg-white text-slate-900"
-                  />
-                </div>
-
-                {/* Celular Empresa */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-bold text-sky-900 uppercase flex items-center space-x-1">
-                      <Phone className="w-3 h-3 text-sky-600" />
-                      <span>Celular / WhatsApp (Opcional)</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={replicateCelular}
-                      className="text-[10px] text-sky-700 font-bold hover:underline flex items-center space-x-0.5"
-                      title="Replicar Celular a todos los registros"
-                    >
-                      <Copy className="w-3 h-3" />
-                      <span>Replicar</span>
-                    </button>
-                  </div>
-                  <input
-                    type="tel"
-                    value={sharedCelular}
-                    onChange={(e) => setSharedCelular(e.target.value)}
-                    placeholder="ej. 3764123456"
-                    className="w-full p-2.5 rounded-xl border border-sky-200 font-medium text-xs bg-white text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">Observaciones Comunes (Opcional)</label>
-                <input
-                  type="text"
-                  value={bulkObservaciones}
-                  onChange={(e) => setBulkObservaciones(e.target.value)}
-                  placeholder="ej. Entrega de flota colectivos transporte urbano"
-                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs bg-white text-slate-900"
-                />
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Punto de Entrega */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                Punto de Entrega *
+              </label>
+              <select
+                value={station}
+                onChange={(e) => setStation(e.target.value)}
+                disabled={currentUser.punto_entrega !== 'Todos' && !!currentUser.punto_entrega}
+                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none disabled:bg-slate-100"
+              >
+                {deliveryPoints.map((pt) => (
+                  <option key={pt} value={pt}>
+                    {pt}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* 2. Grilla de Carga de Patentes / Dominios */}
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center space-x-1">
-                  <Hash className="w-4 h-4 text-cs-primary" />
-                  <span>2. Asignación de Patentes / Dominios por Vehículo</span>
-                </span>
-                <div className="flex items-center space-x-2">
-                  {bulkRows.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={replicateFromFirstRow}
-                      className="text-[11px] font-bold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-lg transition flex items-center space-x-1 shadow-xs"
-                      title="Copiar CUIT/DNI y Razón Social de la primera fila (o configuración) a todos los vehículos de abajo"
-                    >
-                      <Copy className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>Replicar CUIT + Razón Social (a todos)</span>
-                    </button>
-                  )}
-
-                  {bulkIncompleteRowsCount > 0 && (
-                    <span className="text-xs font-bold text-rose-800 bg-rose-100 border border-rose-200 px-2.5 py-1 rounded-lg flex items-center space-x-1 shadow-xs">
-                      <AlertCircle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0" />
-                      <span>{bulkIncompleteRowsCount} con obligatorios pendientes</span>
-                    </span>
-                  )}
-
-                  {bulkInvalidRowsCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setBulkRows((prev) => prev.filter((r) => validateTagDelivery(bulkStation, r.tagSerial).valid))}
-                      className="text-[11px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg hover:bg-rose-100 transition flex items-center space-x-1 shadow-xs"
-                      title="Quitar de la lista las filas que ya fueron entregadas o no están en stock"
-                    >
-                      <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-                      <span>Omitir {bulkInvalidRowsCount} no disponible(s)</span>
-                    </button>
-                  )}
-                  <span className="text-xs font-extrabold text-emerald-900 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-full font-mono">
-                    {bulkRows.length} Unidades
-                  </span>
-                </div>
+            {/* Primer TAG Serial */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-bold text-cs-primary uppercase">
+                  Nº Serie TAG RFID *
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const first = getFirstAvailableTagForStation(station);
+                    if (first) setStartSerial(first);
+                  }}
+                  className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5"
+                  title="Sugerir el primer TAG disponible en stock para esta estación"
+                >
+                  <Zap className="w-3 h-3 text-emerald-600" />
+                  <span>Primer Disponible</span>
+                </button>
               </div>
-
-              {bulkRows.length === 0 ? (
-                <div className="p-4 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center text-xs text-slate-500 font-medium">
-                  Ingrese el <b>Primer Nº Serie TAG</b> y la <b>Cantidad de TAGs</b> arriba para desplegar la grilla de asignación de patentes.
-                </div>
-              ) : (
-                <div className="max-h-[320px] overflow-y-auto border border-slate-200 rounded-xl shadow-inner">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead className="bg-slate-100 text-slate-700 sticky top-0 z-10 font-bold border-b border-slate-200">
-                      <tr>
-                        <th className="p-2.5 text-center w-10">#</th>
-                        <th className="p-2.5">TAG Serial *</th>
-                        <th className="p-2.5">Estado Stock</th>
-                        <th className="p-2.5">
-                          <div className="flex items-center justify-between">
-                            <span>Dominio / Patente *</span>
-                            {bulkRows.length > 1 && bulkRows[0]?.dominio && (
-                              <button
-                                type="button"
-                                onClick={generateSequentialPlates}
-                                className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5 ml-1"
-                                title="Generar patentes correlativas/secuenciales (ej. AA123CD, AA124CD...) a partir de la Fila 1"
-                              >
-                                <Hash className="w-3 h-3" />
-                                <span>Correlativos</span>
-                              </button>
-                            )}
-                          </div>
-                        </th>
-                        <th className="p-2.5">
-                          <div className="flex items-center justify-between">
-                            <span>DNI / CUIT *</span>
-                            <button
-                              type="button"
-                              onClick={replicateDniCuit}
-                              className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5 ml-1"
-                              title="Replicar DNI/CUIT de la fila 1 a las demás filas"
-                            >
-                              <Copy className="w-3 h-3" />
-                              <span>Replicar</span>
-                            </button>
-                          </div>
-                        </th>
-                        <th className="p-2.5">
-                          <div className="flex items-center justify-between">
-                            <span>Razón Social / Receptor</span>
-                            <button
-                              type="button"
-                              onClick={replicateNombre}
-                              className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5 ml-1"
-                              title="Replicar Razón Social de la fila 1 a las demás filas"
-                            >
-                              <Copy className="w-3 h-3" />
-                              <span>Replicar</span>
-                            </button>
-                          </div>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
-                      {bulkRows.map((row, idx) => {
-                        const rowVal = row.tagSerial.trim()
-                          ? validateTagDelivery(bulkStation, row.tagSerial)
-                          : null;
-
-                        const isAlreadyDelivered = rowVal && !rowVal.valid && rowVal.error?.toLowerCase().includes('ya fue entregado');
-                        const isMissingDominio = !row.dominio.trim();
-                        const isMissingDni = !(row.dniCuit || sharedDniCuit).trim();
-
-                        return (
-                          <tr key={row.id} className={`transition ${rowVal && !rowVal.valid ? 'bg-rose-50/40' : (isMissingDominio || isMissingDni) ? 'bg-amber-50/20' : 'hover:bg-emerald-50/30'}`}>
-                            <td className="p-2.5 text-center font-mono font-extrabold text-slate-400">
-                              {idx + 1}
-                            </td>
-                            <td className="p-2.5 font-mono font-bold text-cs-primary">
-                              <input
-                                type="text"
-                                value={row.tagSerial}
-                                onChange={(e) => handleBulkRowChange(row.id, 'tagSerial', e.target.value)}
-                                className={`w-full p-1.5 rounded-lg border font-mono font-bold text-xs uppercase focus:ring-2 focus:outline-none ${
-                                  rowVal
-                                    ? rowVal.valid
-                                      ? 'border-slate-300 text-slate-900 focus:ring-emerald-500'
-                                      : 'border-rose-400 text-rose-900 bg-rose-50 focus:ring-rose-500'
-                                    : 'border-slate-300 text-slate-900'
-                                }`}
-                                required
-                              />
-                            </td>
-                            <td className="p-2.5 whitespace-nowrap">
-                              {rowVal ? (
-                                rowVal.valid ? (
-                                  <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-200">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                    <span>OK</span>
-                                  </span>
-                                ) : (
-                                  <span
-                                    title={rowVal.error}
-                                    className="inline-flex items-center space-x-1 text-[10px] font-bold text-rose-800 bg-rose-100 px-2 py-0.5 rounded-md border border-rose-200 cursor-help"
-                                  >
-                                    <AlertCircle className="w-3 h-3 text-rose-600" />
-                                    <span>{isAlreadyDelivered ? 'Ya Entregado' : 'Sin Stock'}</span>
-                                  </span>
-                                )
-                              ) : (
-                                <span className="text-[10px] text-slate-400 font-medium">-</span>
-                              )}
-                            </td>
-                            <td className="p-2.5">
-                              <input
-                                type="text"
-                                value={row.dominio}
-                                onChange={(e) => handleBulkRowChange(row.id, 'dominio', e.target.value)}
-                                placeholder="OBLIGATORIO"
-                                maxLength={8}
-                                className={`w-full p-1.5 rounded-lg border-2 font-mono font-bold text-xs uppercase focus:ring-2 focus:outline-none ${
-                                  isMissingDominio
-                                    ? 'border-rose-400 bg-rose-50/60 text-rose-900 placeholder-rose-400 focus:ring-rose-500'
-                                    : 'border-cs-primary/50 text-slate-900 bg-cs-primary/5 focus:ring-cs-primary'
-                                }`}
-                                required
-                              />
-                            </td>
-                            <td className="p-2.5">
-                              <input
-                                type="text"
-                                value={row.dniCuit}
-                                onChange={(e) => handleBulkRowChange(row.id, 'dniCuit', e.target.value)}
-                                placeholder={sharedDniCuit.trim() ? sharedDniCuit : "OBLIGATORIO"}
-                                className={`w-full p-1.5 rounded-lg border text-xs focus:ring-2 focus:outline-none ${
-                                  isMissingDni
-                                    ? 'border-rose-400 bg-rose-50/60 text-rose-900 placeholder-rose-400 font-semibold focus:ring-rose-500'
-                                    : 'border-slate-300 font-medium text-slate-900 focus:ring-cs-primary'
-                                }`}
-                                required
-                              />
-                            </td>
-                            <td className="p-2.5">
-                              <input
-                                type="text"
-                                value={row.nombre}
-                                onChange={(e) => handleBulkRowChange(row.id, 'nombre', e.target.value)}
-                                placeholder="Transportes S.R.L."
-                                className="w-full p-1.5 rounded-lg border border-slate-300 text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              <input
+                type="text"
+                value={startSerial}
+                onChange={(e) => setStartSerial(e.target.value.toUpperCase().trim())}
+                placeholder="ej. 63230000"
+                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+              />
+              {startSerial && (
+                <div className="mt-1 text-[10px] text-emerald-800 font-bold flex items-center space-x-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span>Serie inicial configurada ({quantity} TAG{quantity > 1 ? 's' : ''})</span>
                 </div>
               )}
             </div>
 
-            {/* Botón de Guardar Entrega Masiva */}
-            <button
-              type="submit"
-              disabled={
-                loading ||
-                currentUser.rol === 'Consulta' ||
-                bulkRows.length === 0 ||
-                bulkInvalidRowsCount > 0 ||
-                bulkIncompleteRowsCount > 0
-              }
-              className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold text-sm rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 uppercase tracking-wider"
-            >
-              <Truck className="w-5 h-5" />
-              <span>
-                {currentUser.rol === 'Consulta'
-                  ? 'SOLO LECTURA (REGISTRO DESHABILITADO)'
-                  : loading
-                  ? 'Registrando Flota...'
-                  : bulkIncompleteRowsCount > 0
-                  ? `⚠️ COMPLETAR CAMPOS OBLIGATORIOS (PATENTE / CUIT) PARA GUARDAR`
-                  : bulkInvalidRowsCount > 0
-                  ? `⛔ OMITIR TAGS SIN STOCK PARA GUARDAR`
-                  : `🚚 GUARDAR Y REGISTRAR ENTREGA MASIVA (${bulkRows.length} TAGs)`}
+            {/* Cantidad de TAGs (Default: 1) */}
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                Cantidad de TAGs *
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={quantity}
+                onChange={(e) => setQuantity(parseInt(e.target.value, 10) || 1)}
+                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+              />
+            </div>
+
+            {/* DNI / CUIT Principal */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                  DNI / CUIT Receptor *
+                </label>
+                <button
+                  type="button"
+                  onClick={handleReplicateHeaderDni}
+                  className="text-[10px] text-cs-primary font-bold hover:underline flex items-center space-x-0.5"
+                  title="Replicar este DNI/CUIT en todas las filas de la lista"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>Replicar</span>
+                </button>
+              </div>
+              <input
+                type="text"
+                value={sharedDniCuit}
+                onChange={(e) => setSharedDniCuit(e.target.value.replace(/\D/g, ''))}
+                placeholder="Sin puntos ni guiones (ej. 30712345678)"
+                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+            {/* Nombre / Razón Social */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                  Nombre / Razón Social (Opcional)
+                </label>
+                <button
+                  type="button"
+                  onClick={handleReplicateHeaderNombre}
+                  className="text-[10px] text-cs-primary font-bold hover:underline flex items-center space-x-0.5"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>Replicar</span>
+                </button>
+              </div>
+              <input
+                type="text"
+                value={sharedNombre}
+                onChange={(e) => setSharedNombre(e.target.value)}
+                placeholder="ej. Juan Pérez / Empresa S.R.L."
+                className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+              />
+            </div>
+
+            {/* Email Contacto */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                  Email Contacto (Opcional)
+                </label>
+                <button
+                  type="button"
+                  onClick={handleReplicateHeaderEmail}
+                  className="text-[10px] text-cs-primary font-bold hover:underline flex items-center space-x-0.5"
+                >
+                  <Mail className="w-3 h-3" />
+                  <span>Replicar</span>
+                </button>
+              </div>
+              <input
+                type="email"
+                value={sharedEmail}
+                onChange={(e) => setSharedEmail(e.target.value)}
+                placeholder="ej. contacto@empresa.com"
+                className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+              />
+            </div>
+
+            {/* Celular / WhatsApp */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-bold text-slate-700 uppercase">
+                  Celular / WhatsApp (Opcional)
+                </label>
+                <button
+                  type="button"
+                  onClick={handleReplicateHeaderCelular}
+                  className="text-[10px] text-cs-primary font-bold hover:underline flex items-center space-x-0.5"
+                >
+                  <Phone className="w-3 h-3" />
+                  <span>Replicar</span>
+                </button>
+              </div>
+              <input
+                type="text"
+                value={sharedCelular}
+                onChange={(e) => setSharedCelular(e.target.value.replace(/\D/g, ''))}
+                placeholder="ej. 3764123456"
+                className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+              Observaciones (Opcional)
+            </label>
+            <input
+              type="text"
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              placeholder="ej. Entrega efectuada en estación de peaje"
+              className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+            />
+          </div>
+        </div>
+
+        {/* 2. ASIGNACIÓN DE PATENTES / DOMINIOS POR VEHÍCULO */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Hash className="w-4 h-4 text-cs-primary" />
+              <span className="font-bold text-xs uppercase tracking-wider text-slate-800">
+                2. ASIGNACIÓN DE PATENTES / DOMINIOS POR VEHÍCULO
               </span>
-            </button>
-          </form>
-        )}
-      </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-extrabold bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-lg border border-emerald-300">
+                {rows.length} {rows.length === 1 ? 'Unidad' : 'Unidades'}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-xs text-left text-slate-700">
+              <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="p-2.5 text-center w-12">#</th>
+                  <th className="p-2.5">TAG Serial *</th>
+                  <th className="p-2.5 text-center">Estado Stock</th>
+                  <th className="p-2.5">Dominio / Patente *</th>
+                  <th className="p-2.5">DNI / CUIT *</th>
+                  <th className="p-2.5">Nombre / Razón Social</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {rows.map((row, idx) => {
+                  const val = validateTagDelivery(station, row.tagSerial);
+
+                  return (
+                    <tr key={row.id} className="hover:bg-slate-50/80 transition">
+                      <td className="p-2.5 text-center font-bold text-slate-500">{idx + 1}</td>
+                      <td className="p-2.5">
+                        <input
+                          type="text"
+                          value={row.tagSerial}
+                          onChange={(e) => handleRowChange(row.id, 'tagSerial', e.target.value)}
+                          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg font-mono font-bold text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                        />
+                      </td>
+                      <td className="p-2.5 text-center">
+                        {val.valid ? (
+                          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2 py-0.5 rounded border border-emerald-300 inline-flex items-center space-x-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            <span>OK</span>
+                          </span>
+                        ) : (
+                          <span
+                            className="bg-rose-100 text-rose-800 text-[10px] font-bold px-2 py-0.5 rounded border border-rose-300 inline-flex items-center space-x-1"
+                            title={val.error}
+                          >
+                            <AlertCircle className="w-3 h-3 text-rose-600" />
+                            <span>ERR</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-2.5">
+                        <input
+                          type="text"
+                          value={row.dominio}
+                          onChange={(e) => handleRowChange(row.id, 'dominio', e.target.value)}
+                          placeholder="ej. AA123CD"
+                          className={`w-full p-1.5 rounded-lg font-mono font-bold text-xs uppercase focus:ring-2 focus:ring-cs-primary focus:outline-none border ${
+                            !row.dominio.trim()
+                              ? 'bg-rose-50/60 border-rose-300 text-rose-800 placeholder:text-rose-400'
+                              : 'bg-white border-slate-300 text-slate-900'
+                          }`}
+                        />
+                      </td>
+                      <td className="p-2.5">
+                        <input
+                          type="text"
+                          value={row.dniCuit}
+                          onChange={(e) => handleRowChange(row.id, 'dniCuit', e.target.value.replace(/\D/g, ''))}
+                          placeholder="ej. 30712345678"
+                          className={`w-full p-1.5 rounded-lg font-mono text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none border ${
+                            !row.dniCuit.trim() && !sharedDniCuit.trim()
+                              ? 'bg-rose-50/60 border-rose-300 text-rose-800 placeholder:text-rose-400'
+                              : 'bg-white border-slate-300 text-slate-900 font-bold'
+                          }`}
+                        />
+                      </td>
+                      <td className="p-2.5">
+                        <input
+                          type="text"
+                          value={row.nombre}
+                          onChange={(e) => handleRowChange(row.id, 'nombre', e.target.value)}
+                          placeholder="ej. Juan Pérez / Empresa S.R.L."
+                          className="w-full p-1.5 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* BOTÓN REGISTRAR ENTREGA */}
+        <div className="pt-2">
+          <button
+            type="submit"
+            disabled={loading || !isFormValid}
+            className={`w-full py-3.5 px-6 rounded-xl text-xs font-extrabold tracking-wider uppercase shadow-sm transition flex items-center justify-center space-x-2 ${
+              isFormValid && !loading
+                ? 'bg-cs-primary hover:bg-emerald-950 text-white cursor-pointer'
+                : 'bg-slate-300 text-slate-500 cursor-not-allowed border border-slate-300'
+            }`}
+          >
+            {loading ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>REGISTRANDO ENTREGA...</span>
+              </>
+            ) : (
+              <>
+                <Truck className="w-4 h-4 text-emerald-300" />
+                <span>
+                  {rows.length === 1
+                    ? '🚚 REGISTRAR ENTREGA DE 1 TAG'
+                    : `🚚 REGISTRAR ENTREGA MASIVA DE ${rows.length} TAGS`}
+                </span>
+              </>
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

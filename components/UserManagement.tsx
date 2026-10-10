@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { UserProfile, PeajeStock } from '@/types/database';
 import { UserPlus, Shield, UserCheck, UserX, AlertCircle, CheckCircle2, RefreshCw, Key, Info, Edit, X, Save, MapPin } from 'lucide-react';
 import { getMasterDeliveryPoints, fixUserName } from '@/lib/deliveryPoints';
+import { logUserAction } from '@/lib/auditLogger';
 import ConfirmModal from '@/components/ConfirmModal';
 
 const LOCAL_USERS_KEY = 'telepase_registered_user_profiles';
@@ -278,6 +279,13 @@ export default function UserManagement() {
     setUsers(updatedUsers);
     localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updatedUsers));
 
+    logUserAction(
+      null,
+      'USUARIO_CREADO',
+      'Usuarios',
+      `Alta de nuevo usuario ${emailClean} (${nombre}) - Rol: ${rol} - Punto: ${puntoEntrega}`
+    );
+
     if (!savedToRemote) {
       try {
         const pendingSyncsRaw = localStorage.getItem('telepase_pending_user_syncs');
@@ -360,6 +368,13 @@ export default function UserManagement() {
 
     setUsers(updatedUsers);
     localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(updatedUsers));
+
+    logUserAction(
+      null,
+      'USUARIO_EDITADO',
+      'Usuarios',
+      `Edición de perfil de usuario ${emailClean} (${editNombre}) - Rol: ${editRol} - Punto: ${editPuntoEntrega}`
+    );
 
     if (!savedToRemote) {
       try {
