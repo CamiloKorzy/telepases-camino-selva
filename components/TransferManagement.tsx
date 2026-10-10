@@ -373,243 +373,236 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
 
   return (
     <div className="space-y-6">
-      {/* Formulario de Nuevo Envío / Movimiento de Inventario */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
-        <div className="bg-cs-dark text-white p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Truck className="w-5 h-5 text-cs-accent" />
-            <h3 className="font-bold text-base">Movimiento de Inventario entre Puntos de Entrega (Envíos y Recepciones)</h3>
+      {/* Formulario de Nuevo Envío / Movimiento de Inventario (Oculto para Rol Consulta) */}
+      {currentUser.rol !== 'Consulta' && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 overflow-hidden">
+          <div className="bg-cs-dark text-white p-4 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Truck className="w-5 h-5 text-cs-accent" />
+              <h3 className="font-bold text-base">Movimiento de Inventario entre Puntos de Entrega (Envíos y Recepciones)</h3>
+            </div>
+            <span className="text-[11px] font-bold bg-white/10 text-emerald-200 px-3 py-1 rounded-full border border-white/15">
+              Gestión de Envíos y Logística
+            </span>
           </div>
-          <span className="text-[11px] font-bold bg-white/10 text-emerald-200 px-3 py-1 rounded-full border border-white/15">
-            Gestión de Envíos y Logística
-          </span>
-        </div>
 
-        <form onSubmit={handleSaveTransfer} className="p-5 space-y-5">
-          {currentUser.rol === 'Consulta' && (
-            <div className="p-3 bg-sky-50 border border-sky-200 text-sky-900 text-xs font-bold rounded-xl flex items-center space-x-2">
-              <AlertCircle className="w-5 h-5 text-sky-600 flex-shrink-0" />
-              <span>MODO SOLO LECTURA: Su usuario Auditor / Consulta de Inventarios no tiene permisos para crear movimientos o confirmar recepciones.</span>
-            </div>
-          )}
-
-          {message && (
-            <div
-              className={`p-3 rounded-xl flex items-center space-x-2 text-xs font-medium ${
-                message.type === 'success'
-                  ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                  : 'bg-rose-50 text-rose-800 border border-rose-200'
-              }`}
-            >
-              {message.type === 'success' ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
-              )}
-              <span>{message.text}</span>
-            </div>
-          )}
-
-          {/* 1. Datos del Envío */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
-                1. Fecha de Envío *
-              </label>
-              <input
-                type="date"
-                value={fechaEnvio}
-                onChange={(e) => setFechaEnvio(e.target.value)}
-                className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white text-slate-800"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
-                2. Origen (Punto Remitente) *
-              </label>
-              <select
-                value={origen}
-                onChange={(e) => setOrigen(e.target.value)}
-                disabled={!isAdmin}
-                className={`w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none text-slate-800 ${
-                  !isAdmin ? 'bg-slate-100 cursor-not-allowed' : 'bg-white'
+          <form onSubmit={handleSaveTransfer} className="p-5 space-y-5">
+            {message && (
+              <div
+                className={`p-3 rounded-xl flex items-center space-x-2 text-xs font-medium ${
+                  message.type === 'success'
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-rose-50 text-rose-800 border border-rose-200'
                 }`}
               >
-                {deliveryPoints.map((pt) => (
-                  <option key={`orig_${pt}`} value={pt}>
-                    {pt}
-                  </option>
+                {message.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                )}
+                <span>{message.text}</span>
+              </div>
+            )}
+
+            {/* 1. Datos del Envío */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+              <div>
+                <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
+                  1. Fecha de Envío *
+                </label>
+                <input
+                  type="date"
+                  value={fechaEnvio}
+                  onChange={(e) => setFechaEnvio(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white text-slate-800"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
+                  2. Origen (Punto Remitente) *
+                </label>
+                <select
+                  value={origen}
+                  onChange={(e) => setOrigen(e.target.value)}
+                  disabled={!isAdmin}
+                  className={`w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none text-slate-800 ${
+                    !isAdmin ? 'bg-slate-100 cursor-not-allowed' : 'bg-white'
+                  }`}
+                >
+                  {deliveryPoints.map((pt) => (
+                    <option key={`orig_${pt}`} value={pt}>
+                      {pt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
+                  3. Destino (Punto Destinatario) *
+                </label>
+                <select
+                  value={destino}
+                  onChange={(e) => setDestino(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white text-slate-800"
+                >
+                  {deliveryPoints.map((pt) => (
+                    <option key={`dest_${pt}`} value={pt}>
+                      {pt}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
+                  4. Nº Remito de Transferencia
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={numeroRemito}
+                    onChange={(e) => setNumeroRemito(e.target.value)}
+                    placeholder="ej. TR-001-9821"
+                    className="w-full p-2.5 pr-8 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white"
+                  />
+                  <Receipt className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5" />
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Renglones de Series Enviadas */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Hash className="w-4 h-4 text-cs-primary" />
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                    Rangos de Series del Envío (Cálculo Automático de Unidades)
+                  </h4>
+                </div>
+                <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Soporta etiquetas físicas (...999) o cotas (...000)
+                </span>
+              </div>
+
+              <div className="space-y-2 border border-slate-200 p-3 rounded-xl bg-slate-50/50">
+                {rangeRows.map((row, idx) => (
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-2xs"
+                  >
+                    <div className="sm:col-span-1 text-[11px] font-extrabold text-slate-400 text-center">
+                      #{idx + 1}
+                    </div>
+
+                    <div className="sm:col-span-4">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                        Inicia (Serial Desde)
+                      </label>
+                      <input
+                        type="text"
+                        value={row.serialDesde}
+                        onChange={(e) => handleRangeRowChange(row.id, 'serialDesde', e.target.value)}
+                        placeholder="ej. 63228500"
+                        className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                        required
+                      />
+                    </div>
+
+                    <div className="sm:col-span-4">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
+                        Termina (Serial Hasta)
+                      </label>
+                      <input
+                        type="text"
+                        value={row.serialHasta}
+                        onChange={(e) => handleRangeRowChange(row.id, 'serialHasta', e.target.value)}
+                        placeholder="ej. 63229999"
+                        className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                        required
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-bold text-emerald-700 uppercase mb-0.5">
+                        Cantidad (u.)
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={row.cantidad}
+                        onChange={(e) => handleRangeRowChange(row.id, 'cantidad', e.target.value)}
+                        placeholder="1500"
+                        className="w-full p-2 rounded-lg border-2 border-emerald-400 font-mono font-bold text-emerald-900 text-xs bg-emerald-50/60 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        required
+                      />
+                    </div>
+
+                    <div className="sm:col-span-1 flex items-center justify-center pt-3 sm:pt-0">
+                      {rangeRows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRangeRow(row.id)}
+                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                          title="Eliminar este rango"
+                        >
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 ))}
-              </select>
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={handleAddRangeRow}
+                    className="py-2 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs"
+                  >
+                    <Plus className="w-4 h-4 text-emerald-600" />
+                    <span>+ Agregar Otro Rango al Envío</span>
+                  </button>
+
+                  <div className="text-xs font-bold text-slate-700 bg-white px-3 py-1.5 rounded-xl border border-slate-200">
+                    Total Envío: <span className="text-cs-primary text-sm font-extrabold">{totalTagsInForm.toLocaleString('es-AR')}</span> TAGs ({rangeRows.length} rangos)
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
-                3. Destino (Punto Destinatario) *
-              </label>
-              <select
-                value={destino}
-                onChange={(e) => setDestino(e.target.value)}
-                className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white text-slate-800"
-              >
-                {deliveryPoints.map((pt) => (
-                  <option key={`dest_${pt}`} value={pt}>
-                    {pt}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-cs-primary uppercase mb-1">
-                4. Nº Remito de Transferencia
+              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                Observaciones del Envío / Chofer Transporte (Opcional)
               </label>
               <div className="relative">
                 <input
                   type="text"
-                  value={numeroRemito}
-                  onChange={(e) => setNumeroRemito(e.target.value)}
-                  placeholder="ej. TR-001-9821"
-                  className="w-full p-2.5 pr-8 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white"
+                  value={observaciones}
+                  onChange={(e) => setObservaciones(e.target.value)}
+                  placeholder="ej. Traslado interno en camioneta oficial concesionario con Remito de salida"
+                  className="w-full p-2.5 pl-9 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
                 />
-                <Receipt className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5" />
+                <FileText className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               </div>
             </div>
-          </div>
 
-          {/* 2. Renglones de Series Enviadas */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Hash className="w-4 h-4 text-cs-primary" />
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
-                  Rangos de Series del Envío (Cálculo Automático de Unidades)
-                </h4>
-              </div>
-              <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                Soporta etiquetas físicas (...999) o cotas (...000)
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full py-3 bg-cs-primary hover:bg-cs-dark text-white font-bold text-xs rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 uppercase tracking-wider"
+            >
+              <Truck className="w-4 h-4 text-cs-accent" />
+              <span>
+                {submitting
+                  ? 'Registrando Envío...'
+                  : `🚚 REGISTRAR ENVÍO (${totalTagsInForm.toLocaleString('es-AR')} TAGs DE ${origen.toUpperCase()} A ${destino.toUpperCase()})`}
               </span>
-            </div>
-
-            <div className="space-y-2 border border-slate-200 p-3 rounded-xl bg-slate-50/50">
-              {rangeRows.map((row, idx) => (
-                <div
-                  key={row.id}
-                  className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-white p-3 rounded-xl border border-slate-200 shadow-2xs"
-                >
-                  <div className="sm:col-span-1 text-[11px] font-extrabold text-slate-400 text-center">
-                    #{idx + 1}
-                  </div>
-
-                  <div className="sm:col-span-4">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
-                      Inicia (Serial Desde)
-                    </label>
-                    <input
-                      type="text"
-                      value={row.serialDesde}
-                      onChange={(e) => handleRangeRowChange(row.id, 'serialDesde', e.target.value)}
-                      placeholder="ej. 63228500"
-                      className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                      required
-                    />
-                  </div>
-
-                  <div className="sm:col-span-4">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">
-                      Termina (Serial Hasta)
-                    </label>
-                    <input
-                      type="text"
-                      value={row.serialHasta}
-                      onChange={(e) => handleRangeRowChange(row.id, 'serialHasta', e.target.value)}
-                      placeholder="ej. 63229999"
-                      className="w-full p-2 rounded-lg border border-slate-300 text-xs font-mono font-bold focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                      required
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-[10px] font-bold text-emerald-700 uppercase mb-0.5">
-                      Cantidad (u.)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={row.cantidad}
-                      onChange={(e) => handleRangeRowChange(row.id, 'cantidad', e.target.value)}
-                      placeholder="1500"
-                      className="w-full p-2 rounded-lg border-2 border-emerald-400 font-mono font-bold text-emerald-900 text-xs bg-emerald-50/60 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                      required
-                    />
-                  </div>
-
-                  <div className="sm:col-span-1 flex items-center justify-center pt-3 sm:pt-0">
-                    {rangeRows.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRangeRow(row.id)}
-                        className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                        title="Eliminar este rango"
-                      >
-                        <Trash className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              <div className="flex items-center justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={handleAddRangeRow}
-                  className="py-2 px-4 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-2xs"
-                >
-                  <Plus className="w-4 h-4 text-emerald-600" />
-                  <span>+ Agregar Otro Rango al Envío</span>
-                </button>
-
-                <div className="text-xs font-bold text-slate-700 bg-white px-3 py-1.5 rounded-xl border border-slate-200">
-                  Total Envío: <span className="text-cs-primary text-sm font-extrabold">{totalTagsInForm.toLocaleString('es-AR')}</span> TAGs ({rangeRows.length} rangos)
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-              Observaciones del Envío / Chofer Transporte (Opcional)
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                value={observaciones}
-                onChange={(e) => setObservaciones(e.target.value)}
-                placeholder="ej. Traslado interno en camioneta oficial concesionario con Remito de salida"
-                className="w-full p-2.5 pl-9 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
-              />
-              <FileText className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={submitting || currentUser.rol === 'Consulta'}
-            className="w-full py-3 bg-cs-primary hover:bg-cs-dark text-white font-bold text-xs rounded-xl transition shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 uppercase tracking-wider"
-          >
-            <Truck className="w-4 h-4 text-cs-accent" />
-            <span>
-              {currentUser.rol === 'Consulta'
-                ? 'SOLO LECTURA (REGISTRO DESHABILITADO)'
-                : submitting
-                ? 'Registrando Envío...'
-                : `🚚 REGISTRAR ENVÍO (${totalTagsInForm.toLocaleString('es-AR')} TAGs DE ${origen.toUpperCase()} A ${destino.toUpperCase()})`}
-            </span>
-          </button>
-        </form>
-      </div>
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Historial y Control de Movimientos de Inventario */}
       <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
