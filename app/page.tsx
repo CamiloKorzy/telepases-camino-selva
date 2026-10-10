@@ -13,8 +13,7 @@ import TransferManagement from '@/components/TransferManagement';
 import ScheduledReportModal from '@/components/ScheduledReportModal';
 import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName, DEFAULT_BATCHES } from '@/lib/deliveryPoints';
 import ActivationDocManagement, { getActivationDocConfig, generateWhatsAppLink } from '@/components/ActivationDocManagement';
-import BackupRestoreModal from '@/components/BackupRestoreModal';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText, Database } from 'lucide-react';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 
 export default function AntigravityDashboard() {
@@ -27,7 +26,6 @@ export default function AntigravityDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users' | 'settings_docs'>('dashboard');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
 
   const docConfig = useMemo(() => getActivationDocConfig(), [activeTab]);
 
@@ -79,76 +77,6 @@ export default function AntigravityDashboard() {
     const handleSessionUpdated = () => syncSession();
     window.addEventListener('user_session_updated', handleSessionUpdated);
     return () => window.removeEventListener('user_session_updated', handleSessionUpdated);
-  }, []);
-
-  // Escuchador de Puente de Sincronización entre dominios (Recuperar datos de vercel.app a telepase.caminoselva.com)
-  useEffect(() => {
-    const handleBridgeMessage = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'TELEPASE_BRIDGE_PAYLOAD') {
-        const payload = event.data.payload;
-        if (!payload || typeof payload !== 'object') return;
-
-        let dataMerged = false;
-
-        // 1. Mergear Entregas
-        if (Array.isArray(payload['telepase_local_tag_deliveries']) && payload['telepase_local_tag_deliveries'].length > 0) {
-          const currentDeliveriesRaw = localStorage.getItem('telepase_local_tag_deliveries');
-          const currentDeliveries: TagDelivery[] = currentDeliveriesRaw ? JSON.parse(currentDeliveriesRaw) : [];
-          const incomingDeliveries: TagDelivery[] = payload['telepase_local_tag_deliveries'];
-
-          const deliveryMap = new Map<string, TagDelivery>();
-          [...incomingDeliveries, ...currentDeliveries].forEach((d) => {
-            if (!d) return;
-            const key = d.id || d.tag_serial || `${d.estacion}_${d.dominio}`;
-            if (!deliveryMap.has(key)) deliveryMap.set(key, d);
-          });
-          const merged = Array.from(deliveryMap.values());
-          localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(merged));
-          dataMerged = true;
-        }
-
-        // 2. Mergear Lotes
-        if (Array.isArray(payload['telepase_local_tag_batches']) && payload['telepase_local_tag_batches'].length > 0) {
-          const currentBatchesRaw = localStorage.getItem('telepase_local_tag_batches');
-          const currentBatches: TagBatch[] = currentBatchesRaw ? JSON.parse(currentBatchesRaw) : [];
-          const incomingBatches: TagBatch[] = payload['telepase_local_tag_batches'];
-
-          const batchMap = new Map<string, TagBatch>();
-          [...incomingBatches, ...currentBatches].forEach((b) => {
-            if (!b) return;
-            const key = b.id || `${b.estacion}_${b.serial_desde}_${b.serial_hasta}`;
-            if (!batchMap.has(key)) batchMap.set(key, b);
-          });
-          const merged = Array.from(batchMap.values());
-          localStorage.setItem('telepase_local_tag_batches', JSON.stringify(merged));
-          dataMerged = true;
-        }
-
-        // 3. Mergear Transferencias
-        if (Array.isArray(payload['telepase_local_tag_transfers']) && payload['telepase_local_tag_transfers'].length > 0) {
-          const currentTransfersRaw = localStorage.getItem('telepase_local_tag_transfers');
-          const currentTransfers: TagTransfer[] = currentTransfersRaw ? JSON.parse(currentTransfersRaw) : [];
-          const incomingTransfers: TagTransfer[] = payload['telepase_local_tag_transfers'];
-
-          const transferMap = new Map<string, TagTransfer>();
-          [...incomingTransfers, ...currentTransfers].forEach((t) => {
-            if (!t) return;
-            const key = t.id || `${t.origen}_${t.destino}_${t.serial_desde}_${t.serial_hasta}`;
-            if (!transferMap.has(key)) transferMap.set(key, t);
-          });
-          const merged = Array.from(transferMap.values());
-          localStorage.setItem('telepase_local_tag_transfers', JSON.stringify(merged));
-          dataMerged = true;
-        }
-
-        if (dataMerged) {
-          fetchData();
-        }
-      }
-    };
-
-    window.addEventListener('message', handleBridgeMessage);
-    return () => window.removeEventListener('message', handleBridgeMessage);
   }, []);
 
   const fetchData = async () => {
@@ -736,15 +664,6 @@ export default function AntigravityDashboard() {
             </div>
 
             <button
-              onClick={() => setIsBackupModalOpen(true)}
-              className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300/80 rounded-xl transition flex items-center space-x-1 text-xs font-bold shadow-2xs"
-              title="Respaldar o Migrar Datos entre Dominios"
-            >
-              <Database className="w-4 h-4 text-amber-700" />
-              <span className="hidden sm:inline">Respaldar / Migrar</span>
-            </button>
-
-            <button
               onClick={fetchData}
               className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
               title="Recargar Datos"
@@ -1288,12 +1207,6 @@ export default function AntigravityDashboard() {
         stocks={stocks}
       />
 
-      <BackupRestoreModal
-        isOpen={isBackupModalOpen}
-        onClose={() => setIsBackupModalOpen(false)}
-        onDataRestored={fetchData}
-      />
-
       <ConfirmModal
         isOpen={confirmModalState.isOpen}
         title={confirmModalState.title}
@@ -1306,16 +1219,6 @@ export default function AntigravityDashboard() {
           setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
         }}
         onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
-      />
-
-      {/* Invisible Sync Bridge IFrames to auto-restore data from previous Vercel deployment domains */}
-      <iframe
-        src="https://telepases-camino-selva-3vc4bwl18-camiloks-projects.vercel.app/sync-bridge"
-        style={{ display: 'none', width: 0, height: 0, border: 0 }}
-      />
-      <iframe
-        src="https://telepases-camino-selva.vercel.app/sync-bridge"
-        style={{ display: 'none', width: 0, height: 0, border: 0 }}
       />
     </div>
   );
