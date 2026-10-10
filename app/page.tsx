@@ -12,7 +12,7 @@ import DeliveryPointManagement from '@/components/DeliveryPointManagement';
 import TransferManagement from '@/components/TransferManagement';
 import ScheduledReportModal from '@/components/ScheduledReportModal';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail } from 'lucide-react';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, BarChart3, Calendar } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 
 export default function AntigravityDashboard() {
@@ -25,6 +25,11 @@ export default function AntigravityDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users'>('dashboard');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+
+  // Filtros temporales para indicadores y grilla
+  const [dateFilterMode, setDateFilterMode] = useState<'todos' | 'hoy' | 'semana' | 'mes' | 'rango'>('mes');
+  const [customFechaDesde, setCustomFechaDesde] = useState<string>('');
+  const [customFechaHasta, setCustomFechaHasta] = useState<string>('');
 
   // Estado para edición de entrega por Administrador
   const [editingDelivery, setEditingDelivery] = useState<TagDelivery | null>(null);
@@ -353,7 +358,64 @@ export default function AntigravityDashboard() {
     });
   };
 
-  // Filtrado de búsquedas
+  const isDateInFilter = (dateStr: string | undefined, filterMode: string, customDesde: string, customHasta: string): boolean => {
+    if (!dateStr) return false;
+    if (filterMode === 'todos') return true;
+
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    if (filterMode === 'hoy') {
+      return d >= startOfToday && d <= endOfToday;
+    }
+
+    if (filterMode === 'semana') {
+      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+      return d >= startOfWeek && d <= endOfToday;
+    }
+
+    if (filterMode === 'mes') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      return d >= startOfMonth && d <= endOfToday;
+    }
+
+    if (filterMode === 'rango') {
+      let matches = true;
+      if (customDesde) {
+        const fromDate = new Date(customDesde + 'T00:00:00');
+        if (!isNaN(fromDate.getTime())) {
+          matches = matches && d >= fromDate;
+        }
+      }
+      if (customHasta) {
+        const toDate = new Date(customHasta + 'T23:59:59');
+        if (!isNaN(toDate.getTime())) {
+          matches = matches && d <= toDate;
+        }
+      }
+      return matches;
+    }
+
+    return true;
+  };
+
+  // Entregas filtradas por período para indicadores
+  const periodDeliveries = (deliveries || []).filter((d) =>
+    isDateInFilter(d?.created_at, dateFilterMode, customFechaDesde, customFechaHasta)
+  );
+
+  const totalPeriodDeliveries = periodDeliveries.length;
+
+  const deliveriesByStation = availableStations.map((st) => {
+    const count = periodDeliveries.filter((d) => d && d.estacion && d.estacion.trim().toLowerCase() === st.trim().toLowerCase()).length;
+    return { estacion: st, count };
+  });
+
+  // Filtrado completo para grilla y exportación
   const filteredDeliveries = (deliveries || []).filter((d) => {
     if (!d) return false;
     const term = (searchTerm || '').toLowerCase().trim();
@@ -372,8 +434,9 @@ export default function AntigravityDashboard() {
       ope.includes(term);
 
     const matchesStation = selectedStation === 'Todas' || d.estacion === selectedStation;
+    const matchesDate = isDateInFilter(d.created_at, dateFilterMode, customFechaDesde, customFechaHasta);
 
-    return matchesSearch && matchesStation;
+    return matchesSearch && matchesStation && matchesDate;
   });
 
   // Exportar a Excel (.xlsx) nativo
@@ -668,15 +731,109 @@ export default function AntigravityDashboard() {
               </div>
             )}
 
-            {/* Formulario + Tabla de Registros */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Formulario con usuario autenticado */}
-              <div className="lg:col-span-5">
-                <DeliveryForm currentUser={userSession} onDeliverySuccess={fetchData} />
+            {/* 1. Indicadores de Entregas por Peajes con Selección Temporal */}
+            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div className="flex items-center space-x-2">
+                  <BarChart3 className="w-5 h-5 text-cs-primary" />
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900">Indicadores de Entregas por Peajes</h3>
+                    <p className="text-xs text-slate-500">Métricas de TAGs entregados en vía según el período seleccionado</p>
+                  </div>
+                </div>
+
+                {/* Selector de Período Temporal */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="bg-slate-100 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-200">
+                    <button
+                      onClick={() => setDateFilterMode('hoy')}
+                      className={`px-3 py-1.5 rounded-lg transition ${
+                        dateFilterMode === 'hoy' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Hoy
+                    </button>
+                    <button
+                      onClick={() => setDateFilterMode('semana')}
+                      className={`px-3 py-1.5 rounded-lg transition ${
+                        dateFilterMode === 'semana' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Semana
+                    </button>
+                    <button
+                      onClick={() => setDateFilterMode('mes')}
+                      className={`px-3 py-1.5 rounded-lg transition ${
+                        dateFilterMode === 'mes' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Mes
+                    </button>
+                    <button
+                      onClick={() => setDateFilterMode('rango')}
+                      className={`px-3 py-1.5 rounded-lg transition ${
+                        dateFilterMode === 'rango' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Rango de Fechas
+                    </button>
+                  </div>
+
+                  {dateFilterMode === 'rango' && (
+                    <div className="flex items-center space-x-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200 text-xs">
+                      <input
+                        type="date"
+                        value={customFechaDesde}
+                        onChange={(e) => setCustomFechaDesde(e.target.value)}
+                        className="p-1.5 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                      />
+                      <span className="text-slate-400 font-bold">a</span>
+                      <input
+                        type="date"
+                        value={customFechaHasta}
+                        onChange={(e) => setCustomFechaHasta(e.target.value)}
+                        className="p-1.5 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
 
+              {/* Tarjetas Resumen del Período */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl text-center">
+                  <span className="text-[10px] font-bold text-emerald-800 uppercase block">Total Período</span>
+                  <span className="text-xl font-black text-emerald-950 font-mono">
+                    {totalPeriodDeliveries.toLocaleString('es-AR')}
+                  </span>
+                  <span className="text-[10px] text-emerald-700 block font-medium">TAGs Entregados</span>
+                </div>
+
+                {deliveriesByStation.map((item) => (
+                  <div key={`stat_${item.estacion}`} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-center">
+                    <span className="text-[10px] font-bold text-cs-primary uppercase block truncate" title={item.estacion}>
+                      {item.estacion}
+                    </span>
+                    <span className="text-xl font-black text-slate-900 font-mono">
+                      {item.count.toLocaleString('es-AR')}
+                    </span>
+                    <span className="text-[10px] text-slate-500 block font-medium">Entregas</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 2. Formulario / Grilla Detalle de Entregas */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Formulario con usuario autenticado (Oculto para Rol Consulta) */}
+              {userSession.rol !== 'Consulta' && (
+                <div className="lg:col-span-5">
+                  <DeliveryForm currentUser={userSession} onDeliverySuccess={fetchData} />
+                </div>
+              )}
+
               {/* Listado Completo de Entregas con Exportación Excel */}
-              <div className="lg:col-span-7 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
+              <div className={userSession.rol === 'Consulta' ? 'lg:col-span-12 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4' : 'lg:col-span-7 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4'}>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center space-x-2">
                     <Layers className="w-5 h-5 text-cs-primary" />
