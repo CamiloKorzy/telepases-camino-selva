@@ -18,6 +18,7 @@ import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut
 import ConfirmModal from '@/components/ConfirmModal';
 import TagSeriesDetailModal from '@/components/TagSeriesDetailModal';
 import { logUserAction } from '@/lib/auditLogger';
+import { getAllTransfers } from '@/lib/inventoryValidation';
 
 export default function AntigravityDashboard() {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -610,60 +611,64 @@ export default function AntigravityDashboard() {
     return matchesSearch && matchesStation && matchesDate;
   });
 
-  // Exportar a Excel (.xlsx) nativo
+  // Exportar a Excel (.xlsx) nativo con las 7 columnas exactas registradas
   const exportToExcel = () => {
     const excelData = filteredDeliveries.map((d) => ({
-      'ID Registro': d.id,
-      'Fecha y Hora': d.created_at ? new Date(d.created_at).toLocaleString('es-AR') : '',
-      'Punto de Entrega': d.estacion,
-      'Dominio / Patente': d.dominio,
-      'Nº Serie TAG RFID': d.tag_serial,
-      'DNI / CUIT': d.dni_cuit,
-      'Nombre Receptor': d.nombre_apellido || 'N/A',
-      'Email Contacto (Folleto)': d.email_contacto || '-',
-      'Celular Contacto (SMS/WhatsApp)': d.celular_contacto || '-',
-      'Usuario Registrador': d.operador_runner,
-      'Observaciones': d.observaciones || '',
-      'Sincronizado GLM': d.sincronizado_glm ? 'SÍ' : 'NO',
+      'Fecha/Hora': d.created_at
+        ? new Date(d.created_at).toLocaleString('es-AR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '',
+      'Punto de Entrega': d.estacion || '',
+      'Patente': d.dominio || '',
+      'TAG Serial': d.tag_serial || '',
+      'DNI / CUIT': d.dni_cuit || '',
+      'Nombre Receptor': d.nombre_apellido || '-',
+      'Usuario Registrador': fixUserName(d.operador_runner) || '',
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Entregas TAG TelePASE');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Entregas TAG');
 
     worksheet['!cols'] = [
-      { wch: 36 },
-      { wch: 20 },
-      { wch: 22 },
-      { wch: 12 },
-      { wch: 16 },
-      { wch: 14 },
-      { wch: 24 },
-      { wch: 26 },
-      { wch: 22 },
-      { wch: 22 },
-      { wch: 30 },
-      { wch: 15 },
+      { wch: 18 }, // Fecha/Hora
+      { wch: 22 }, // Punto de Entrega
+      { wch: 14 }, // Patente
+      { wch: 16 }, // TAG Serial
+      { wch: 16 }, // DNI / CUIT
+      { wch: 26 }, // Nombre Receptor
+      { wch: 24 }, // Usuario Registrador
     ];
 
     const fechaHoy = new Date().toISOString().slice(0, 10);
-    XLSX.writeFile(workbook, `Entregas_TAGs_CaminoSelva_${fechaHoy}.xlsx`);
+    XLSX.writeFile(workbook, `Entregas_TelePASE_${fechaHoy}.xlsx`);
   };
 
-  // Exportar a CSV
+  // Exportar a CSV con las 7 columnas exactas registradas
   const exportToCSV = () => {
-    const headers = 'ID,Fecha_Hora,Punto_de_Entrega,Dominio,TAG_Serial,DNI_CUIT,Nombre_Apellido,Email_Contacto,Celular_Contacto,Usuario_Operador,Observaciones\n';
-    const rows = filteredDeliveries
-      .map((d) => `${d.id},${d.created_at},"${d.estacion}",${d.dominio},${d.tag_serial},${d.dni_cuit},"${d.nombre_apellido || ''}","${d.email_contacto || ''}","${d.celular_contacto || ''}","${d.operador_runner}","${d.observaciones || ''}"`)
-      .join('\n');
-    
-    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    const headers = ['Fecha/Hora', 'Punto de Entrega', 'Patente', 'TAG Serial', 'DNI / CUIT', 'Nombre Receptor', 'Usuario Registrador'];
+    const rows = filteredDeliveries.map((d) => [
+      `"${d.created_at ? new Date(d.created_at).toLocaleString('es-AR') : ''}"`,
+      `"${(d.estacion || '').replace(/"/g, '""')}"`,
+      `"${(d.dominio || '').replace(/"/g, '""')}"`,
+      `"${(d.tag_serial || '').replace(/"/g, '""')}"`,
+      `"${(d.dni_cuit || '').replace(/"/g, '""')}"`,
+      `"${(d.nombre_apellido || '-').replace(/"/g, '""')}"`,
+      `"${(fixUserName(d.operador_runner) || '').replace(/"/g, '""')}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Entregas_TAGs_CaminoSelva_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Entregas_TelePASE_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
 
   if (!userSession) {
@@ -988,6 +993,18 @@ export default function AntigravityDashboard() {
                       isDateInFilter(d.created_at, dateFilterMode, customFechaDesde, customFechaHasta)
                   ).length;
 
+                  const allTransfersList = getAllTransfers();
+                  const enviadosPeriodo = (allTransfersList || [])
+                    .filter(
+                      (t) =>
+                        t &&
+                        t.origen &&
+                        t.origen.trim().toLowerCase() === s.estacion.trim().toLowerCase() &&
+                        t.estado !== 'Cancelado' &&
+                        isDateInFilter(t.created_at || t.fecha_envio, dateFilterMode, customFechaDesde, customFechaHasta)
+                    )
+                    .reduce((acc, t) => acc + (Number(t.cantidad) || 0), 0);
+
                   return (
                     <div
                       key={s.estacion}
@@ -1018,9 +1035,14 @@ export default function AntigravityDashboard() {
                       <div className="text-xl sm:text-2xl font-black text-slate-900 leading-tight">
                         {disponible.toLocaleString('es-AR')} <span className="text-xs font-normal text-slate-500">disp.</span>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-1.5 flex items-center justify-between gap-1">
-                        <span>Entregados: <b className="text-slate-800">{entregadosPeriodo.toLocaleString('es-AR')}</b></span>
-                        <span>Recibidos: <b className="text-slate-700">{s.stock_recibido.toLocaleString('es-AR')}</b></span>
+                      <div className="text-[11px] text-slate-500 mt-1.5 space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span>Entregados: <b className="text-slate-800">{entregadosPeriodo.toLocaleString('es-AR')}</b></span>
+                          <span>Enviados: <b className="text-emerald-800 font-bold">{enviadosPeriodo.toLocaleString('es-AR')}</b></span>
+                        </div>
+                        <div className="flex items-center justify-between pt-0.5 border-t border-slate-100">
+                          <span>Recibidos: <b className="text-slate-700">{s.stock_recibido.toLocaleString('es-AR')}</b></span>
+                        </div>
                       </div>
 
                       <div
@@ -1144,27 +1166,25 @@ export default function AntigravityDashboard() {
                   </select>
                 </div>
 
-                {/* Tabla con TODA la Información Registrada e Información del Usuario */}
+                {/* Tabla con la Información Registrada */}
                 <div className="overflow-x-auto max-h-[520px] overflow-y-auto border border-slate-200 rounded-xl">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead className="bg-cs-dark text-white sticky top-0 z-10">
                       <tr>
                         <th className="p-3">Fecha/Hora</th>
                         <th className="p-3">Punto de Entrega</th>
-                        <th className="p-3">Patente *</th>
-                        <th className="p-3">TAG Serial *</th>
-                        <th className="p-3">DNI / CUIT *</th>
+                        <th className="p-3">Patente</th>
+                        <th className="p-3">TAG Serial</th>
+                        <th className="p-3">DNI / CUIT</th>
                         <th className="p-3">Nombre Receptor</th>
-                        <th className="p-3">Contacto (Mail / Cel)</th>
                         <th className="p-3">Usuario Registrador</th>
-                        <th className="p-3">Observaciones</th>
                         {isAdmin && <th className="p-3 text-center">Acciones</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {filteredDeliveries.length === 0 ? (
                         <tr>
-                          <td colSpan={isAdmin ? 10 : 9} className="p-6 text-center text-slate-400">
+                          <td colSpan={isAdmin ? 8 : 7} className="p-6 text-center text-slate-400">
                             No se encontraron registros de entrega.
                           </td>
                         </tr>
@@ -1187,58 +1207,9 @@ export default function AntigravityDashboard() {
                             <td className="p-3 font-mono text-cs-primary font-bold">{item.tag_serial}</td>
                             <td className="p-3 font-semibold text-slate-800 font-mono">{item.dni_cuit}</td>
                             <td className="p-3 text-slate-700">{item.nombre_apellido || '-'}</td>
-                            <td className="p-3 text-slate-700 font-mono text-[11px]">
-                              {item.email_contacto || item.celular_contacto ? (
-                                <div className="space-y-1">
-                                  {item.email_contacto && (
-                                    <div className="flex items-center space-x-1">
-                                      <a
-                                        href={`mailto:${item.email_contacto}?subject=${encodeURIComponent(docConfig.email_subject || 'Folleto TelePASE')}&body=${encodeURIComponent(
-                                          (docConfig.email_body_template || '')
-                                            .replace(/{NOMBRE}/g, item.nombre_apellido || '')
-                                            .replace(/{DOMINIO}/g, item.dominio)
-                                            .replace(/{TAG}/g, item.tag_serial)
-                                            .replace(/{ESTACION}/g, item.estacion)
-                                        )}`}
-                                        className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md font-bold text-[10px] transition border ${
-                                          docConfig.email_active
-                                            ? 'bg-sky-50 text-sky-800 border-sky-300 hover:bg-sky-100'
-                                            : 'bg-slate-100 text-slate-500 border-slate-200 line-through opacity-70'
-                                        }`}
-                                        title={docConfig.email_active ? "Enviar Folleto e Instrucciones por Email" : "Envíos por Email Deshabilitados en Configuración"}
-                                      >
-                                        <Mail className="w-3 h-3 text-sky-600 flex-shrink-0" />
-                                        <span className="truncate max-w-[120px]">{item.email_contacto}</span>
-                                      </a>
-                                    </div>
-                                  )}
-                                  {item.celular_contacto && (
-                                    <div className="flex items-center space-x-1">
-                                      <a
-                                        href={docConfig.whatsapp_active ? generateWhatsAppLink(item.celular_contacto, item.nombre_apellido || '', item.dominio, item.tag_serial, item.estacion, docConfig) : '#'}
-                                        target={docConfig.whatsapp_active ? "_blank" : "_self"}
-                                        rel="noopener noreferrer"
-                                        className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-md font-bold text-[10px] transition border ${
-                                          docConfig.whatsapp_active
-                                            ? 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:bg-emerald-100'
-                                            : 'bg-slate-100 text-slate-500 border-slate-200 line-through opacity-70 cursor-not-allowed'
-                                        }`}
-                                        title={docConfig.whatsapp_active ? "Enviar Folleto e Instrucciones por WhatsApp" : "Envíos por WhatsApp Deshabilitados en Configuración"}
-                                      >
-                                        <Send className="w-3 h-3 text-emerald-600 flex-shrink-0" />
-                                        <span>{item.celular_contacto}</span>
-                                      </a>
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-slate-400">-</span>
-                              )}
-                            </td>
                             <td className="p-3 font-semibold text-slate-700 whitespace-nowrap bg-emerald-50/40 text-emerald-900">
                               {fixUserName(item.operador_runner)}
                             </td>
-                            <td className="p-3 text-slate-500 max-w-[150px] truncate">{item.observaciones || '-'}</td>
                             {isAdmin && (
                               <td className="p-3 text-center whitespace-nowrap">
                                 <div className="flex items-center justify-center space-x-1.5">
