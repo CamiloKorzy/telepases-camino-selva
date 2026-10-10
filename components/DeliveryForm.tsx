@@ -6,7 +6,7 @@ import { TagDelivery, UserSession } from '@/types/database';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 import { validateTagDelivery, refreshInventoryCache, getFirstAvailableTagForStation } from '@/lib/inventoryValidation';
 import { logUserAction } from '@/lib/auditLogger';
-import { CheckCircle2, AlertCircle, Car, User, Truck, RefreshCw, Hash, Zap } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Car, User, Truck, Copy, RefreshCw, Hash, Zap } from 'lucide-react';
 
 interface DeliveryFormProps {
   currentUser: UserSession;
@@ -155,6 +155,41 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
         return { ...r, [field]: finalVal };
       })
     );
+  };
+
+  // Replicar DNI y Nombre de la Fila 1 a todas las demás filas
+  const handleReplicateFirstRow = () => {
+    if (rows.length < 2) return;
+    const firstDni = rows[0]?.dniCuit.trim();
+    const firstNombre = rows[0]?.nombre.trim();
+
+    setRows((prev) =>
+      prev.map((r, idx) =>
+        idx === 0
+          ? r
+          : {
+              ...r,
+              dniCuit: firstDni || r.dniCuit,
+              nombre: firstNombre || r.nombre,
+            }
+      )
+    );
+  };
+
+  // Replicar DNI/CUIT de la Fila 1 a todas
+  const handleReplicateDni = () => {
+    if (rows.length < 2) return;
+    const firstDni = rows[0]?.dniCuit.trim();
+    if (!firstDni) return;
+    setRows((prev) => prev.map((r) => ({ ...r, dniCuit: firstDni })));
+  };
+
+  // Replicar Nombre de la Fila 1 a todas
+  const handleReplicateNombre = () => {
+    if (rows.length < 2) return;
+    const firstNombre = rows[0]?.nombre.trim();
+    if (!firstNombre) return;
+    setRows((prev) => prev.map((r) => ({ ...r, nombre: firstNombre })));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -405,6 +440,18 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
             </div>
 
             <div className="flex items-center space-x-2">
+              {rows.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleReplicateFirstRow}
+                  className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-cs-primary border border-emerald-300 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition shadow-xs"
+                  title="Replicar DNI/CUIT y Nombre de la Fila 1 a todas las demás filas"
+                >
+                  <Copy className="w-3.5 h-3.5 text-cs-primary" />
+                  <span>Replicar DNI y Nombre (Fila 1 ➔ Todas)</span>
+                </button>
+              )}
+
               <span className="text-xs font-extrabold bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-lg border border-emerald-300">
                 {rows.length} {rows.length === 1 ? 'Unidad' : 'Unidades'}
               </span>
@@ -419,8 +466,38 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                   <th className="p-2.5 w-36">TAG Serial *</th>
                   <th className="p-2.5 text-center w-24">Estado Stock</th>
                   <th className="p-2.5 w-36">Dominio / Patente *</th>
-                  <th className="p-2.5 w-40">DNI / CUIT *</th>
-                  <th className="p-2.5">Nombre / Razón Social</th>
+                  <th className="p-2.5 w-44">
+                    <div className="flex items-center justify-between">
+                      <span>DNI / CUIT *</span>
+                      {rows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={handleReplicateDni}
+                          className="text-[9px] text-cs-primary hover:underline font-bold flex items-center space-x-0.5 normal-case"
+                          title="Replicar DNI/CUIT de Fila 1 a todas"
+                        >
+                          <Copy className="w-2.5 h-2.5" />
+                          <span>Replicar</span>
+                        </button>
+                      )}
+                    </div>
+                  </th>
+                  <th className="p-2.5">
+                    <div className="flex items-center justify-between">
+                      <span>Nombre / Razón Social</span>
+                      {rows.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={handleReplicateNombre}
+                          className="text-[9px] text-cs-primary hover:underline font-bold flex items-center space-x-0.5 normal-case"
+                          title="Replicar Nombre de Fila 1 a todas"
+                        >
+                          <Copy className="w-2.5 h-2.5" />
+                          <span>Replicar</span>
+                        </button>
+                      )}
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 bg-white">
