@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import { TagTransfer, TagBatch, UserSession } from '@/types/database';
-import { Truck, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, ArrowRight, CheckCircle, XCircle, Trash2, Plus, Trash, Layers } from 'lucide-react';
+import { Truck, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, ArrowRight, CheckCircle, XCircle, Trash2, Plus, Trash, Layers, FileSpreadsheet, Search, Filter } from 'lucide-react';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 import { validateTransferOut } from '@/lib/inventoryValidation';
 
@@ -47,7 +48,16 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Estados de Filtros de Reporte y Rastreabilidad
   const [filterState, setFilterState] = useState<'Todos' | 'En Tránsito' | 'Recibido'>('Todos');
+  const [dateFilterMode, setDateFilterMode] = useState<'todos' | 'hoy' | 'semana' | 'mes' | 'rango'>('hoy');
+  const [customFechaDesde, setCustomFechaDesde] = useState<string>('');
+  const [customFechaHasta, setCustomFechaHasta] = useState<string>('');
+  const [tipoFilter, setTipoFilter] = useState<'Todos' | 'Ingreso Lote' | 'Transferencia'>('Todos');
+  const [origenFilter, setOrigenFilter] = useState<string>('Todos');
+  const [destinoFilter, setDestinoFilter] = useState<string>('Todos');
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
   // Formulario cabecera (Nuevo Envío)
   const [fechaEnvio, setFechaEnvio] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -431,6 +441,51 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
     return cleanA === cleanB;
   };
 
+  const isDateInFilter = (dateStr: string | undefined, filterMode: string, customDesde: string, customHasta: string): boolean => {
+    if (!dateStr) return false;
+    if (filterMode === 'todos') return true;
+
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+    if (filterMode === 'hoy') {
+      return d >= startOfToday && d <= endOfToday;
+    }
+
+    if (filterMode === 'semana') {
+      const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+      return d >= startOfWeek && d <= endOfToday;
+    }
+
+    if (filterMode === 'mes') {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      return d >= startOfMonth && d <= endOfToday;
+    }
+
+    if (filterMode === 'rango') {
+      let matches = true;
+      if (customDesde) {
+        const fromDate = new Date(customDesde + 'T00:00:00');
+        if (!isNaN(fromDate.getTime())) {
+          matches = matches && d >= fromDate;
+        }
+      }
+      if (customHasta) {
+        const toDate = new Date(customHasta + 'T23:59:59');
+        if (!isNaN(toDate.getTime())) {
+          matches = matches && d <= toDate;
+        }
+      }
+      return matches;
+    }
+
+    return true;
+  };
+
   const canSeeAllMovements =
     currentUser.rol === 'Administrador' ||
     currentUser.rol === 'Consulta' ||
@@ -446,13 +501,95 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
     return matchStation(m.origen, userPoint) || matchStation(m.destino, userPoint);
   });
 
-  // 2. Aplicar filtro por estado (Todos / En Tránsito / Recibidos o Ingresados)
+  // 2. Aplicar filtros completos de reporte: Estado, Tipo, Origen, Destino, Período y Búsqueda por TAG/Remito
   const filteredMovements = userVisibleMovements.filter((m) => {
-    if (filterState === 'Todos') return true;
-    if (filterState === 'En Tránsito') return m.estado === 'En Tránsito';
-    if (filterState === 'Recibido') return m.estado === 'Recibido' || m.estado === 'Ingresado';
+    // Estado
+    if (filterState === 'En Tránsito' && m.estado !== 'En Tránsito') return false;
+    if (filterState === 'Recibido' && m.estado !== 'Recibido' && m.estado !== 'Ingresado') return false;
+
+    // Tipo Movimiento
+    if (tipoFilter !== 'Todos' && m.tipo !== tipoFilter) return false;
+
+    // Origen
+    if (origenFilter !== 'Todos' && m.origen.toLowerCase() !== origenFilter.toLowerCase()) return false;
+
+    // Destino
+    if (destinoFilter !== 'Todos' && m.destino.toLowerCase() !== destinoFilter.toLowerCase()) return false;
+
+    // Período de Fecha
+    const matchesDate = isDateInFilter(m.created_at || m.fecha, dateFilterMode, customFechaDesde, customFechaHasta);
+    if (!matchesDate) return false;
+
+    // Búsqueda por TAG / Serie / Remito / Texto (Rastreabilidad)
+    if (searchTerm.trim()) {
+      const searchClean = searchTerm.trim().toUpperCase();
+      const numSearch = parseInt(searchClean.replace(/\D/g, ''), 10);
+      const matchesSerialRange = !isNaN(numSearch) && (() => {
+        const numDesde = parseInt(m.serial_desde.replace(/\D/g, ''), 10);
+        const numHasta = parseInt(m.serial_hasta.replace(/\D/g, ''), 10);
+        return !isNaN(numDesde) && !isNaN(numHasta) && numSearch >= numDesde && numSearch <= numHasta;
+      })();
+
+      const matchesText =
+        m.numero_remito?.toUpperCase().includes(searchClean) ||
+        m.serial_desde.toUpperCase().includes(searchClean) ||
+        m.serial_hasta.toUpperCase().includes(searchClean) ||
+        m.origen.toUpperCase().includes(searchClean) ||
+        m.destino.toUpperCase().includes(searchClean) ||
+        m.observaciones?.toUpperCase().includes(searchClean) ||
+        m.usuario_envio.toUpperCase().includes(searchClean) ||
+        m.usuario_recepcion?.toUpperCase().includes(searchClean) ||
+        matchesSerialRange;
+
+      if (!matchesText) return false;
+    }
+
     return true;
   });
+
+  // Exportar reporte de movimientos a Excel (.xlsx) nativo
+  const exportToExcel = () => {
+    const excelData = filteredMovements.map((m) => ({
+      'Fecha': m.fecha,
+      'Tipo Movimiento': m.tipo,
+      'Punto Origen': m.origen,
+      'Punto Destino': m.destino,
+      'Nº Remito / Lote': m.numero_remito || '-',
+      'Serial Desde': m.serial_desde,
+      'Serial Hasta': m.serial_hasta,
+      'Unidades': m.cantidad,
+      'Estado Movimiento': m.estado,
+      'Usuario Registrador / Envío': m.usuario_envio,
+      'Usuario Recepción': m.usuario_recepcion || '-',
+      'Observaciones': m.observaciones || '',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Movimientos de Inventario');
+
+    worksheet['!cols'] = [
+      { wch: 14 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 22 },
+      { wch: 20 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 24 },
+      { wch: 24 },
+      { wch: 30 },
+    ];
+
+    const fechaHoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(workbook, `Reporte_Movimientos_Inventario_TAGs_${fechaHoy}.xlsx`);
+  };
+
+  const allStationsOptions = Array.from(
+    new Set([...deliveryPoints, 'Oficina Central'])
+  );
 
   return (
     <div className="space-y-6">
@@ -735,14 +872,177 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
                 Recibidos / Ingresados ({userVisibleMovements.filter((m) => m.estado === 'Recibido' || m.estado === 'Ingresado').length})
               </button>
             </div>
+          </div>
+        </div>
 
-            <button
-              onClick={fetchMovements}
-              className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
-              title="Recargar movimientos"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cs-primary' : ''}`} />
-            </button>
+        {/* Barra de Filtros Avanzados y Exportación Excel para Reportes y Rastreabilidad de TAGs */}
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
+            <div className="flex items-center space-x-2">
+              <Filter className="w-4 h-4 text-cs-primary" />
+              <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                Filtros de Reporte y Rastreabilidad de TAGs
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {/* Botón Descargar XLSX */}
+              <button
+                onClick={exportToExcel}
+                className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-xs transition"
+                title="Descargar reporte completo de movimientos en formato Excel (.xlsx)"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Descargar XLSX</span>
+              </button>
+
+              <button
+                onClick={fetchMovements}
+                className="p-2 bg-white hover:bg-slate-100 text-slate-700 rounded-xl border border-slate-200 transition"
+                title="Recargar movimientos"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cs-primary' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Búsqueda por TAG / Serie / Remito / Lote */}
+            <div className="relative">
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                🔍 Identificar / Rastrear TAG o Remito
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="ej. 63228505, Remito TR-001..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full p-2 pl-8 text-xs rounded-xl border border-slate-300 font-medium focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              </div>
+            </div>
+
+            {/* Filtro Tipo Movimiento */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tipo Movimiento</label>
+              <select
+                value={tipoFilter}
+                onChange={(e) => setTipoFilter(e.target.value as any)}
+                className="w-full p-2 text-xs rounded-xl border border-slate-300 font-semibold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white text-slate-800"
+              >
+                <option value="Todos">Todos los Tipos</option>
+                <option value="Ingreso Lote">Ingreso Lote (Alta)</option>
+                <option value="Transferencia">Transferencia (Envío/Recepción)</option>
+              </select>
+            </div>
+
+            {/* Filtro Punto Origen */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Punto Origen</label>
+              <select
+                value={origenFilter}
+                onChange={(e) => setOrigenFilter(e.target.value)}
+                className="w-full p-2 text-xs rounded-xl border border-slate-300 font-semibold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white text-slate-800"
+              >
+                <option value="Todos">Todos los Orígenes</option>
+                <option value="Proveedor / Remesa">Proveedor / Remesa</option>
+                {allStationsOptions.map((st) => (
+                  <option key={`orig_flt_${st}`} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filtro Punto Destino */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Punto Destino</label>
+              <select
+                value={destinoFilter}
+                onChange={(e) => setDestinoFilter(e.target.value)}
+                className="w-full p-2 text-xs rounded-xl border border-slate-300 font-semibold focus:ring-2 focus:ring-cs-primary focus:outline-none bg-white text-slate-800"
+              >
+                <option value="Todos">Todos los Destinos</option>
+                {allStationsOptions.map((st) => (
+                  <option key={`dest_flt_${st}`} value={st}>
+                    {st}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Selector de Período Temporal */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <div className="flex items-center space-x-2">
+              <span className="text-[11px] font-bold text-slate-600 uppercase">Período:</span>
+              <div className="bg-white p-1 rounded-xl flex items-center text-xs font-bold border border-slate-200">
+                <button
+                  onClick={() => setDateFilterMode('todos')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    dateFilterMode === 'todos' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Todos
+                </button>
+                <button
+                  onClick={() => setDateFilterMode('hoy')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    dateFilterMode === 'hoy' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Hoy
+                </button>
+                <button
+                  onClick={() => setDateFilterMode('semana')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    dateFilterMode === 'semana' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Semana
+                </button>
+                <button
+                  onClick={() => setDateFilterMode('mes')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    dateFilterMode === 'mes' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Mes
+                </button>
+                <button
+                  onClick={() => setDateFilterMode('rango')}
+                  className={`px-3 py-1 rounded-lg transition ${
+                    dateFilterMode === 'rango' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Rango de Fechas
+                </button>
+              </div>
+
+              {dateFilterMode === 'rango' && (
+                <div className="flex items-center space-x-2 bg-white p-1.5 rounded-xl border border-slate-200 text-xs">
+                  <input
+                    type="date"
+                    value={customFechaDesde}
+                    onChange={(e) => setCustomFechaDesde(e.target.value)}
+                    className="p-1 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                  />
+                  <span className="text-slate-400 font-bold">a</span>
+                  <input
+                    type="date"
+                    value={customFechaHasta}
+                    onChange={(e) => setCustomFechaHasta(e.target.value)}
+                    className="p-1 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="text-xs font-bold text-slate-500">
+              Registros Encontrados: <b className="text-cs-primary font-mono text-sm">{filteredMovements.length}</b>
+            </div>
           </div>
         </div>
 
@@ -767,8 +1067,8 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
                 <tr>
                   <td colSpan={10} className="p-6 text-center text-slate-400 font-medium">
                     {!canSeeAllMovements && currentUser.punto_entrega
-                      ? `No hay movimientos de inventario registrados para la estación ${currentUser.punto_entrega}.`
-                      : 'No se han registrado movimientos de inventario aún.'}
+                      ? `No hay movimientos de inventario registrados que coincidan con los filtros aplicados.`
+                      : 'No se encontraron registros con los filtros seleccionados.'}
                   </td>
                 </tr>
               ) : (
