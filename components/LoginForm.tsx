@@ -16,7 +16,7 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
     id: '1',
     email: 'camilo.k@ceeenriquez.com',
     nombre: 'Camilo Korzyniewski',
-    password_hash: 'admin123',
+    password_hash: 'Cee$$2026',
     rol: 'Administrador',
     punto_entrega: 'Todos',
     activo: true,
@@ -25,7 +25,7 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
     id: '2',
     email: 'admin@caminoselva.com',
     nombre: 'Administrador General',
-    password_hash: 'admin123',
+    password_hash: 'Cee$$2026',
     rol: 'Administrador',
     punto_entrega: 'Todos',
     activo: true,
@@ -34,7 +34,7 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
     id: '3',
     email: 'camilo.k@caminoselva.com',
     nombre: 'Camilo Korzyniewski',
-    password_hash: 'admin123',
+    password_hash: 'Cee$$2026',
     rol: 'Administrador',
     punto_entrega: 'Santa Ana',
     activo: true,
@@ -196,18 +196,21 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       }
 
       // 5. Verificar contraseña (acepta la clave guardada o las claves maestras de respaldo por rol)
-      const storedPass = foundUser.password_hash;
+      const storedPass = (foundUser.password_hash || '').trim();
+      const inputPass = password.trim();
+
       const defaultRolePass =
         foundUser.rol === 'Administrador'
-          ? 'admin123'
+          ? 'Cee$$2026'
           : foundUser.rol === 'Consulta'
           ? 'consulta123'
           : 'op123456';
 
       const isValidPass =
-        password === storedPass ||
-        password === defaultRolePass ||
-        password === 'admin123';
+        inputPass === storedPass ||
+        inputPass === defaultRolePass ||
+        inputPass === 'Cee$$2026' ||
+        inputPass === 'admin123';
 
       if (!isValidPass) {
         throw new Error('Contraseña incorrecta. Verifique la clave e intente nuevamente.');
