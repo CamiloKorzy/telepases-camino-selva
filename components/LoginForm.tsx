@@ -98,8 +98,16 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
 export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberUser, setRememberUser] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    const savedEmail = localStorage.getItem('telepase_remembered_email');
+    if (savedEmail) {
+      setEmail(savedEmail);
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,13 +133,19 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         } catch {}
       }
 
-      // 2. Obtener usuarios de Supabase si la base de datos está disponible
+      // 2. Obtener usuarios de Supabase con timeout de 400ms para evitar demoras/congelamientos
       try {
-        const { data: dbUsers } = await supabase.from('user_profiles').select('*');
+        const fetchDbUsers = supabase.from('user_profiles').select('*');
+        const timeoutPromise = new Promise<{ data: any[] | null }>((resolve) =>
+          setTimeout(() => resolve({ data: null }), 400)
+        );
+        const res = await Promise.race([fetchDbUsers, timeoutPromise]);
+        const dbUsers = res.data;
         if (dbUsers && dbUsers.length > 0) {
           const userMap = new Map<string, UserProfile>();
           [...dbUsers, ...registeredUsers].forEach((u) => userMap.set(u.email.toLowerCase(), u));
           registeredUsers = Array.from(userMap.values());
+          localStorage.setItem('telepase_registered_user_profiles', JSON.stringify(registeredUsers));
         }
       } catch {}
 
@@ -144,21 +158,23 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         }
       });
 
-      // Intentar sincronizar las cuentas por defecto faltantes en Supabase (en segundo plano)
+      // Sincronizar cuentas por defecto de forma asíncrona (non-blocking)
       if (missingInList.length > 0) {
-        try {
-          await supabase.from('user_profiles').upsert(
-            missingInList.map((u) => ({
-              email: u.email.toLowerCase(),
-              nombre: fixUserName(u.nombre),
-              password_hash: u.password_hash,
-              rol: u.rol,
-              punto_entrega: u.punto_entrega,
-              activo: u.activo,
-            })),
-            { onConflict: 'email' }
-          );
-        } catch {}
+        (async () => {
+          try {
+            await supabase.from('user_profiles').upsert(
+              missingInList.map((u) => ({
+                email: u.email.toLowerCase(),
+                nombre: fixUserName(u.nombre),
+                password_hash: u.password_hash,
+                rol: u.rol,
+                punto_entrega: u.punto_entrega,
+                activo: u.activo,
+              })),
+              { onConflict: 'email' }
+            );
+          } catch {}
+        })();
       }
 
       const normalizeUserKey = (str: string): string => {
@@ -170,7 +186,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
           .replace(/[\.\_\-\s]/g, '');
       };
 
-      // 4. Buscar usuario coincidente por nivel de prioridad (1º Email exacto, 2º Usuario prefix, 3º Alias normalizado)
+      // 4. Buscar usuario coincidente por prioridad (1º Email exacto, 2º Usuario prefix, 3º Alias normalizado)
       let foundUser = registeredUsers.find((u) => u.email.toLowerCase() === emailClean);
 
       if (!foundUser) {
@@ -195,7 +211,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         throw new Error('Su usuario ha sido DESACTIVADO por el Administrador.');
       }
 
-      // 5. Verificar contraseña (acepta la clave guardada o las claves maestras de respaldo por rol)
+      // 5. Verificar contraseña (acepta clave guardada o clave maestra por rol)
       const storedPass = (foundUser.password_hash || '').trim();
       const inputPass = password.trim();
 
@@ -216,7 +232,14 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         throw new Error('Contraseña incorrecta. Verifique la clave e intente nuevamente.');
       }
 
-      // 6. Generar y guardar la sesión de usuario activa
+      // 6. Recordar usuario si la casilla está marcada
+      if (rememberUser) {
+        localStorage.setItem('telepase_remembered_email', emailClean);
+      } else {
+        localStorage.removeItem('telepase_remembered_email');
+      }
+
+      // 7. Generar y guardar la sesión de usuario activa
       const session: UserSession = {
         email: foundUser.email,
         nombre: fixUserName(foundUser.nombre),
@@ -297,6 +320,18 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
               />
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <label className="flex items-center space-x-2 text-xs text-slate-600 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={rememberUser}
+                onChange={(e) => setRememberUser(e.target.checked)}
+                className="w-4 h-4 text-cs-primary rounded border-slate-300 focus:ring-cs-primary accent-cs-primary"
+              />
+              <span>Recordar mi usuario</span>
+            </label>
           </div>
 
           <button
