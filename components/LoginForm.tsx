@@ -40,8 +40,8 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
   },
   {
     id: '4',
-    email: 'operador@caminoselva.com',
-    nombre: 'Operador Santa Ana',
+    email: 'peaje.santa.ana@caminoselva.com',
+    nombre: 'Peaje Santa Ana',
     password_hash: 'op123456',
     rol: 'Operador',
     punto_entrega: 'Santa Ana',
@@ -58,7 +58,7 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
   },
   {
     id: '6',
-    email: 'operador.coloniavictoria@caminoselva.com',
+    email: 'peaje.victoria@caminoselva.com',
     nombre: 'Peaje Colonia Victoria',
     password_hash: 'op123456',
     rol: 'Operador',
@@ -67,8 +67,8 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
   },
   {
     id: '7',
-    email: 'operador.parajefachinal@caminoselva.com',
-    nombre: 'Peaje Paraje Fachinal',
+    email: 'peaje.fachinal@caminoselva.com',
+    nombre: 'Peaje Fachinal',
     password_hash: 'op123456',
     rol: 'Operador',
     punto_entrega: 'Paraje Fachinal',
@@ -76,7 +76,7 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
   },
   {
     id: '8',
-    email: 'operador.ituzaingo@caminoselva.com',
+    email: 'peaje.ituzaingo@caminoselva.com',
     nombre: 'Peaje Ituzaingó',
     password_hash: 'op123456',
     rol: 'Operador',
@@ -85,11 +85,11 @@ const DEFAULT_ACCOUNTS: UserProfile[] = [
   },
   {
     id: '9',
-    email: 'oficinacentral@caminoselva.com',
+    email: 'oficina.central@caminoselva.com',
     nombre: 'Oficina Central',
     password_hash: 'admin123',
-    rol: 'Administrador',
-    punto_entrega: 'Todos',
+    rol: 'Operador',
+    punto_entrega: 'Oficina Central',
     activo: true,
   },
 ];
