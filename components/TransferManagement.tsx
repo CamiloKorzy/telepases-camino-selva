@@ -2,14 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { TagTransfer, UserSession } from '@/types/database';
-import { Truck, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, ArrowRight, CheckCircle, XCircle, Trash2, Plus, Trash } from 'lucide-react';
+import { TagTransfer, TagBatch, UserSession } from '@/types/database';
+import { Truck, PlusCircle, CheckCircle2, AlertCircle, RefreshCw, Hash, FileText, Receipt, ArrowRight, CheckCircle, XCircle, Trash2, Plus, Trash, Layers } from 'lucide-react';
 import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 import { validateTransferOut } from '@/lib/inventoryValidation';
 
 import ConfirmModal from '@/components/ConfirmModal';
 
 const LOCAL_TRANSFERS_KEY = 'telepase_local_tag_transfers';
+const LOCAL_BATCHES_KEY = 'telepase_local_tag_batches';
 
 interface TransferManagementProps {
   currentUser: UserSession;
@@ -23,14 +24,32 @@ interface TransferRangeRow {
   cantidad: string;
 }
 
+export interface MovementItem {
+  id: string;
+  created_at?: string;
+  fecha: string;
+  tipo: 'Ingreso Lote' | 'Transferencia';
+  origen: string;
+  destino: string;
+  serial_desde: string;
+  serial_hasta: string;
+  cantidad: number;
+  estado: 'Ingresado' | 'En Tránsito' | 'Recibido' | 'Cancelado';
+  numero_remito?: string;
+  usuario_envio: string;
+  usuario_recepcion?: string;
+  observaciones?: string;
+  rawTransfer?: TagTransfer;
+}
+
 export default function TransferManagement({ currentUser, onTransferUpdated }: TransferManagementProps) {
-  const [transfers, setTransfers] = useState<TagTransfer[]>([]);
+  const [movements, setMovements] = useState<MovementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [filterState, setFilterState] = useState<'Todos' | 'En Tránsito' | 'Recibido'>('Todos');
 
-  // Formulario cabecera
+  // Formulario cabecera (Nuevo Envío)
   const [fechaEnvio, setFechaEnvio] = useState<string>(new Date().toISOString().split('T')[0]);
   const [origen, setOrigen] = useState<string>('Oficina Central');
   const [destino, setDestino] = useState<string>('Santa Ana');
@@ -68,62 +87,127 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
     const handleUpdated = () => loadPoints();
     window.addEventListener('delivery_points_updated', handleUpdated);
     return () => window.removeEventListener('delivery_points_updated', handleUpdated);
-  }, []);
+  }, [currentUser]);
 
-  const fetchTransfers = async () => {
-    let remoteTransfers: TagTransfer[] = [];
+  const fetchMovements = async () => {
     let localTransfers: TagTransfer[] = [];
+    let localBatches: TagBatch[] = [];
 
     // 1. Leer LocalStorage inmediatamente (0ms)
-    const stored = localStorage.getItem(LOCAL_TRANSFERS_KEY);
-    if (stored) {
+    const storedTransfers = localStorage.getItem(LOCAL_TRANSFERS_KEY);
+    if (storedTransfers) {
       try {
-        localTransfers = JSON.parse(stored);
+        localTransfers = JSON.parse(storedTransfers);
       } catch {}
     }
 
-    if (localTransfers.length > 0) {
-      setTransfers(localTransfers);
-      setLoading(false);
-    } else {
-      setLoading(true);
+    const storedBatches = localStorage.getItem(LOCAL_BATCHES_KEY);
+    if (storedBatches) {
+      try {
+        localBatches = JSON.parse(storedBatches);
+      } catch {}
     }
 
-    // 2. Consultar Supabase en segundo plano con timeout rápido (1.5s)
-    try {
-      const fetchPromise = supabase
-        .from('tag_transfers')
-        .select('*')
-        .order('created_at', { ascending: false });
-      const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+    const buildMovementsList = (batchesList: TagBatch[], transfersList: TagTransfer[]): MovementItem[] => {
+      const batchMap = new Map<string, TagBatch>();
+      batchesList.forEach((b) => {
+        if (!b) return;
+        const key = b.id || `${b.estacion}_${b.serial_desde}_${b.serial_hasta}`;
+        if (!batchMap.has(key)) batchMap.set(key, b);
+      });
+      const allBatches = Array.from(batchMap.values());
 
-      const res = await Promise.race([fetchPromise, timeoutPromise]);
-      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
-        remoteTransfers = res.data;
-      }
-    } catch {}
+      const transferMap = new Map<string, TagTransfer>();
+      transfersList.forEach((t) => {
+        if (!t) return;
+        const key = t.id || `${t.origen}_${t.destino}_${t.serial_desde}_${t.serial_hasta}`;
+        if (!transferMap.has(key)) transferMap.set(key, t);
+      });
+      const allTransfers = Array.from(transferMap.values());
 
-    const combinedMap = new Map<string, TagTransfer>();
-    [...remoteTransfers, ...localTransfers].forEach((t) => {
-      const key = t.id || `${t.origen}_${t.destino}_${t.serial_desde}_${t.serial_hasta}`;
-      if (!combinedMap.has(key)) {
-        combinedMap.set(key, t);
-      }
-    });
+      // Convertir Lotes a Movimientos de Ingreso
+      const batchItems: MovementItem[] = allBatches.map((b) => ({
+        id: b.id || `batch_${b.estacion}_${b.serial_desde}_${b.serial_hasta}`,
+        created_at: b.created_at,
+        fecha: b.fecha_recepcion || (b.created_at ? b.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+        tipo: 'Ingreso Lote',
+        origen: 'Proveedor / Remesa',
+        destino: b.estacion || 'Oficina Central',
+        serial_desde: b.serial_desde,
+        serial_hasta: b.serial_hasta,
+        cantidad: Number(b.cantidad) || 0,
+        estado: 'Ingresado',
+        numero_remito: b.numero_remito || 'Lote Alta',
+        usuario_envio: b.usuario_registro || 'Administrador',
+        observaciones: b.observaciones || 'Ingreso de Lote al Sistema',
+      }));
 
-    const combinedList = Array.from(combinedMap.values()).sort(
-      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-    );
+      // Convertir Transferencias a Movimientos
+      const transferItems: MovementItem[] = allTransfers.map((t) => ({
+        id: t.id || `transf_${t.origen}_${t.destino}_${t.serial_desde}_${t.serial_hasta}`,
+        created_at: t.created_at,
+        fecha: t.fecha_envio || (t.created_at ? t.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+        tipo: 'Transferencia',
+        origen: t.origen,
+        destino: t.destino,
+        serial_desde: t.serial_desde,
+        serial_hasta: t.serial_hasta,
+        cantidad: Number(t.cantidad) || 0,
+        estado: t.estado as any,
+        numero_remito: t.numero_remito_transferencia || '-',
+        usuario_envio: t.usuario_envio,
+        usuario_recepcion: t.usuario_recepcion,
+        observaciones: t.observaciones || '',
+        rawTransfer: t,
+      }));
 
-    setTransfers(combinedList);
+      return [...batchItems, ...transferItems].sort(
+        (a, b) => new Date(b.created_at || b.fecha || 0).getTime() - new Date(a.created_at || a.fecha || 0).getTime()
+      );
+    };
+
+    // Renderizar datos locales de inmediato (0ms)
+    const initialList = buildMovementsList(localBatches, localTransfers);
+    setMovements(initialList);
     setLoading(false);
+
+    // 2. Consultar Supabase en paralelo con timeout rápido (1.5s)
+    try {
+      const timeoutMs = 1500;
+      const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+
+      const [resTransfers, resBatches] = await Promise.all([
+        Promise.race([supabase.from('tag_transfers').select('*').order('created_at', { ascending: false }), timeoutPromise]),
+        Promise.race([supabase.from('tag_batches').select('*').order('created_at', { ascending: false }), timeoutPromise]),
+      ]);
+
+      let remoteTransfers: TagTransfer[] = [];
+      if (resTransfers && resTransfers.data && Array.isArray(resTransfers.data)) {
+        remoteTransfers = resTransfers.data;
+      }
+
+      let remoteBatches: TagBatch[] = [];
+      if (resBatches && resBatches.data && Array.isArray(resBatches.data)) {
+        remoteBatches = resBatches.data;
+      }
+
+      const mergedList = buildMovementsList(
+        [...remoteBatches, ...localBatches],
+        [...remoteTransfers, ...localTransfers]
+      );
+      setMovements(mergedList);
+    } catch {}
   };
 
   useEffect(() => {
-    fetchTransfers();
-    const handleUpdated = () => fetchTransfers();
+    fetchMovements();
+    const handleUpdated = () => fetchMovements();
     window.addEventListener('tag_transfers_updated', handleUpdated);
-    return () => window.removeEventListener('tag_transfers_updated', handleUpdated);
+    window.addEventListener('tag_batches_updated', handleUpdated);
+    return () => {
+      window.removeEventListener('tag_transfers_updated', handleUpdated);
+      window.removeEventListener('tag_batches_updated', handleUpdated);
+    };
   }, []);
 
   // Manejo de cambio en filas de rangos
@@ -207,7 +291,6 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
         return;
       }
 
-      // Control de Inventarios: Validar que el rango enviado pertenezca al origen y esté disponible
       const valRes = validateTransferOut(origen, desdeClean, hastaClean, parsedCantidad);
       if (!valRes.valid) {
         setMessage({ type: 'error', text: `Fila #${i + 1}: ${valRes.error}` });
@@ -231,19 +314,15 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
       });
     }
 
-    // Guardar en Supabase
     try {
       await supabase.from('tag_transfers').insert(validPayloads);
     } catch {}
 
-    // Guardar en LocalStorage
     const stored = localStorage.getItem(LOCAL_TRANSFERS_KEY);
     const prevTransfers: TagTransfer[] = stored ? JSON.parse(stored) : [];
     const updatedTransfers = [...validPayloads, ...prevTransfers];
     localStorage.setItem(LOCAL_TRANSFERS_KEY, JSON.stringify(updatedTransfers));
 
-    // Actualizar estado local (0ms lag)
-    setTransfers(updatedTransfers);
     window.dispatchEvent(new Event('tag_transfers_updated'));
 
     setMessage({
@@ -301,9 +380,7 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
           } catch {}
         }
 
-        setTransfers((prev) => prev.map((item) => (item.id === t.id ? updatedPayload : item)));
         window.dispatchEvent(new Event('tag_transfers_updated'));
-
         setMessage({ type: 'success', text: `¡Recepción confirmada exitosamente en ${t.destino}!` });
         onTransferUpdated();
       },
@@ -334,9 +411,7 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
           } catch {}
         }
 
-        setTransfers((prev) => prev.filter((item) => item.id !== t.id));
         window.dispatchEvent(new Event('tag_transfers_updated'));
-
         setMessage({ type: 'success', text: `Transferencia cancelada.` });
         onTransferUpdated();
       },
@@ -356,19 +431,27 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
     return cleanA === cleanB;
   };
 
+  const canSeeAllMovements =
+    currentUser.rol === 'Administrador' ||
+    currentUser.rol === 'Consulta' ||
+    !currentUser.punto_entrega ||
+    currentUser.punto_entrega === 'Todos';
+
   const isAdmin = currentUser.rol === 'Administrador' || !currentUser.punto_entrega || currentUser.punto_entrega === 'Todos';
 
-  // 1. Filtrar transferencias según el Punto de Entrega del usuario (si es Operador)
-  const userVisibleTransfers = transfers.filter((t) => {
-    if (isAdmin) return true;
+  // 1. Filtrar movimientos visibles según rol (Administradores y usuarios Consulta ven TODO)
+  const userVisibleMovements = movements.filter((m) => {
+    if (canSeeAllMovements) return true;
     const userPoint = currentUser.punto_entrega || '';
-    return matchStation(t.origen, userPoint) || matchStation(t.destino, userPoint);
+    return matchStation(m.origen, userPoint) || matchStation(m.destino, userPoint);
   });
 
-  // 2. Aplicar filtro por estado (Todos / En Tránsito / Recibidos)
-  const filteredTransfers = userVisibleTransfers.filter((t) => {
+  // 2. Aplicar filtro por estado (Todos / En Tránsito / Recibidos o Ingresados)
+  const filteredMovements = userVisibleMovements.filter((m) => {
     if (filterState === 'Todos') return true;
-    return t.estado === filterState;
+    if (filterState === 'En Tránsito') return m.estado === 'En Tránsito';
+    if (filterState === 'Recibido') return m.estado === 'Recibido' || m.estado === 'Ingresado';
+    return true;
   });
 
   return (
@@ -611,10 +694,16 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
             <Truck className="w-5 h-5 text-cs-primary" />
             <h3 className="font-bold text-base text-slate-900">
               Historial y Control de Movimientos de Inventario
-              {!isAdmin && currentUser.punto_entrega && (
-                <span className="ml-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                  {currentUser.punto_entrega}
+              {currentUser.rol === 'Consulta' ? (
+                <span className="ml-2 text-xs font-bold text-sky-800 bg-sky-100 border border-sky-300 px-2.5 py-0.5 rounded-full">
+                  Auditoría Concesión (Todos los Movimientos)
                 </span>
+              ) : (
+                !canSeeAllMovements && currentUser.punto_entrega && (
+                  <span className="ml-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                    {currentUser.punto_entrega}
+                  </span>
+                )
               )}
             </h3>
           </div>
@@ -627,7 +716,7 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
                   filterState === 'Todos' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Todos ({userVisibleTransfers.length})
+                Todos ({userVisibleMovements.length})
               </button>
               <button
                 onClick={() => setFilterState('En Tránsito')}
@@ -635,7 +724,7 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
                   filterState === 'En Tránsito' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                En Tránsito ({userVisibleTransfers.filter((t) => t.estado === 'En Tránsito').length})
+                En Tránsito ({userVisibleMovements.filter((m) => m.estado === 'En Tránsito').length})
               </button>
               <button
                 onClick={() => setFilterState('Recibido')}
@@ -643,12 +732,12 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
                   filterState === 'Recibido' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Recibidos ({userVisibleTransfers.filter((t) => t.estado === 'Recibido').length})
+                Recibidos / Ingresados ({userVisibleMovements.filter((m) => m.estado === 'Recibido' || m.estado === 'Ingresado').length})
               </button>
             </div>
 
             <button
-              onClick={fetchTransfers}
+              onClick={fetchMovements}
               className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
               title="Recargar movimientos"
             >
@@ -661,53 +750,77 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
           <table className="w-full text-left border-collapse text-xs">
             <thead className="bg-cs-dark text-white">
               <tr>
-                <th className="p-3">Fecha Envío</th>
+                <th className="p-3">Fecha</th>
+                <th className="p-3">Tipo Movimiento</th>
                 <th className="p-3">Punto Origen</th>
                 <th className="p-3">Punto Destino</th>
-                <th className="p-3">Nº Remito TR</th>
+                <th className="p-3">Nº Remito / Lote</th>
                 <th className="p-3">Serial Desde</th>
                 <th className="p-3">Serial Hasta</th>
                 <th className="p-3">Unidades</th>
                 <th className="p-3">Estado Movimiento</th>
-                <th className="p-3 text-center">Acciones / Confirmación</th>
+                <th className="p-3 text-center">Acciones / Detalle</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {filteredTransfers.length === 0 ? (
+              {filteredMovements.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-6 text-center text-slate-400 font-medium">
-                    {!isAdmin && currentUser.punto_entrega
+                  <td colSpan={10} className="p-6 text-center text-slate-400 font-medium">
+                    {!canSeeAllMovements && currentUser.punto_entrega
                       ? `No hay movimientos de inventario registrados para la estación ${currentUser.punto_entrega}.`
                       : 'No se han registrado movimientos de inventario aún.'}
                   </td>
                 </tr>
               ) : (
-                filteredTransfers.map((t, idx) => {
-                  const canConfirm = currentUser.rol !== 'Consulta' && t.estado === 'En Tránsito' && (isAdmin || matchStation(t.destino, currentUser.punto_entrega));
+                filteredMovements.map((m, idx) => {
+                  const isTransfer = m.tipo === 'Transferencia';
+                  const rawT = m.rawTransfer;
+                  const canConfirm =
+                    isTransfer &&
+                    rawT &&
+                    currentUser.rol !== 'Consulta' &&
+                    m.estado === 'En Tránsito' &&
+                    (isAdmin || matchStation(m.destino, currentUser.punto_entrega));
 
                   return (
-                    <tr key={t.id || idx} className="hover:bg-slate-50 transition">
+                    <tr key={m.id || idx} className="hover:bg-slate-50 transition">
                       <td className="p-3 text-slate-700 font-mono text-[11px] whitespace-nowrap font-bold">
-                        {t.fecha_envio || (t.created_at ? new Date(t.created_at).toLocaleDateString('es-AR') : '-')}
+                        {m.fecha}
                       </td>
-                      <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{t.origen}</td>
+                      <td className="p-3 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded-md font-bold text-[10px] uppercase border ${
+                            m.tipo === 'Ingreso Lote'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                              : 'bg-sky-50 text-sky-800 border-sky-200'
+                          }`}
+                        >
+                          {m.tipo}
+                        </span>
+                      </td>
+                      <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{m.origen}</td>
                       <td className="p-3 font-bold text-cs-primary whitespace-nowrap flex items-center space-x-1">
                         <ArrowRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                        <span>{t.destino}</span>
+                        <span>{m.destino}</span>
                       </td>
-                      <td className="p-3 font-mono font-bold text-slate-900">{t.numero_remito_transferencia || '-'}</td>
-                      <td className="p-3 font-mono font-bold text-slate-800">{t.serial_desde}</td>
-                      <td className="p-3 font-mono font-bold text-slate-800">{t.serial_hasta}</td>
+                      <td className="p-3 font-mono font-bold text-slate-900">{m.numero_remito || '-'}</td>
+                      <td className="p-3 font-mono font-bold text-slate-800">{m.serial_desde}</td>
+                      <td className="p-3 font-mono font-bold text-slate-800">{m.serial_hasta}</td>
                       <td className="p-3 font-bold text-slate-900">
                         <span className="px-2.5 py-1 bg-blue-100 text-blue-900 rounded-full font-mono text-[11px]">
-                          {Number(t.cantidad).toLocaleString('es-AR')} u.
+                          {Number(m.cantidad).toLocaleString('es-AR')} u.
                         </span>
                       </td>
                       <td className="p-3">
-                        {t.estado === 'Recibido' ? (
+                        {m.estado === 'Ingresado' ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                            <CheckCircle className="w-3 h-3 mr-1 text-emerald-700" />
+                            Ingresado en {m.destino}
+                          </span>
+                        ) : m.estado === 'Recibido' ? (
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                             <CheckCircle className="w-3 h-3 mr-1 text-emerald-600" />
-                            Recibido ({t.usuario_recepcion || 'Confirmado'})
+                            Recibido ({m.usuario_recepcion || 'Confirmado'})
                           </span>
                         ) : (
                           <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
@@ -717,10 +830,10 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
                         )}
                       </td>
                       <td className="p-3 text-center whitespace-nowrap">
-                        {canConfirm ? (
+                        {canConfirm && rawT ? (
                           <div className="flex items-center justify-center space-x-1.5">
                             <button
-                              onClick={() => handleConfirmReception(t)}
+                              onClick={() => handleConfirmReception(rawT)}
                               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition flex items-center space-x-1 shadow-xs"
                               title="Confirmar recepción de TAGs en mi estación"
                             >
@@ -729,7 +842,7 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
                             </button>
                             {isAdmin && (
                               <button
-                                onClick={() => handleCancelTransfer(t)}
+                                onClick={() => handleCancelTransfer(rawT)}
                                 className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition"
                                 title="Cancelar envío"
                               >
@@ -737,9 +850,13 @@ export default function TransferManagement({ currentUser, onTransferUpdated }: T
                               </button>
                             )}
                           </div>
-                        ) : t.estado === 'En Tránsito' ? (
+                        ) : m.estado === 'En Tránsito' ? (
                           <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
-                            Pendiente en {t.destino}
+                            Pendiente en {m.destino}
+                          </span>
+                        ) : m.estado === 'Ingresado' ? (
+                          <span className="text-[11px] text-emerald-800 font-semibold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                            Alta de Lote Inicial
                           </span>
                         ) : (
                           <span className="text-[11px] text-slate-500 font-medium">
