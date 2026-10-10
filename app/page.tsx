@@ -158,6 +158,18 @@ export default function AntigravityDashboard() {
     // -------------------------------------------------------------
     // FASE 1: Carga ULTRA-RÁPIDA (0ms) desde LocalStorage
     // -------------------------------------------------------------
+    // FASE 0: Limpieza Inicial de Entregas para inicio limpio de la Base de Datos
+    // -------------------------------------------------------------
+    if (typeof window !== 'undefined' && localStorage.getItem('telepase_deliveries_wiped_v20261010') !== 'true') {
+      localStorage.removeItem('telepase_local_tag_deliveries');
+      localStorage.setItem('telepase_deliveries_wiped_v20261010', 'true');
+      (async () => {
+        try {
+          await supabase.from('tag_deliveries').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        } catch {}
+      })();
+    }
+
     let localDeliveries: TagDelivery[] = [];
     let localBatches: TagBatch[] = [];
     let localTransfers: TagTransfer[] = [];
@@ -481,6 +493,35 @@ export default function AntigravityDashboard() {
           'ELIMINACION_ENTREGA',
           'Entregas',
           `Eliminación de entrega TAG ${item.tag_serial} - Vehículo Dominio: ${item.dominio}`
+        );
+
+        fetchData();
+      },
+    });
+  };
+
+  const handleClearAllDeliveries = () => {
+    if (userSession?.rol !== 'Administrador') return;
+    setConfirmModalState({
+      isOpen: true,
+      title: 'Limpiar Todo el Historial de Entregas',
+      message: '¿Está seguro de que desea ELIMINAR TODAS LAS ENTREGAS DE TAGS registradas? Esta acción vaciará la base de datos de entregas para iniciar el sistema desde cero. Los lotes, transferencias y usuarios permanecerán intactos.',
+      confirmText: 'Sí, Eliminar Todas las Entregas',
+      type: 'danger',
+      icon: 'trash',
+      onConfirm: async () => {
+        try {
+          await supabase.from('tag_deliveries').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        } catch {}
+
+        localStorage.removeItem('telepase_local_tag_deliveries');
+        setDeliveries([]);
+
+        logUserAction(
+          userSession,
+          'LIMPIEZA_ENTREGAS',
+          'Entregas',
+          `Limpieza completa del historial de entregas realizada por Administrador ${userSession.nombre}`
         );
 
         fetchData();
@@ -1062,6 +1103,17 @@ export default function AntigravityDashboard() {
                       <Download className="w-4 h-4 text-cs-accent" />
                       <span>CSV</span>
                     </button>
+
+                    {isAdmin && (
+                      <button
+                        onClick={handleClearAllDeliveries}
+                        className="px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-sm transition"
+                        title="Limpiar todo el historial de entregas de la base de datos (Exclusivo Administrador)"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Limpiar Entregas</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
