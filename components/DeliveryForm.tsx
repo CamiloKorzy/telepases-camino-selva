@@ -284,9 +284,19 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     onDeliverySuccess();
   };
 
+  const startSerialValidation = startSerial.trim()
+    ? validateTagDelivery(station, startSerial)
+    : { valid: false, error: 'Debe ingresar un Número de Serie TAG RFID.' };
+
   const isFormValid =
+    startSerialValidation.valid &&
     rows.length > 0 &&
-    rows.every((r) => r.dominio.trim().length >= 3 && (r.dniCuit.trim().length >= 5 || sharedDniCuit.trim().length >= 5));
+    rows.every(
+      (r) =>
+        validateTagDelivery(station, r.tagSerial).valid &&
+        r.dominio.trim().length >= 3 &&
+        (r.dniCuit.trim().length >= 5 || sharedDniCuit.trim().length >= 5)
+    );
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -383,13 +393,26 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                 value={startSerial}
                 onChange={(e) => setStartSerial(e.target.value.toUpperCase().trim())}
                 placeholder="ej. 63230000"
-                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                className={`w-full p-2.5 bg-white border rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none ${
+                  startSerial.trim()
+                    ? startSerialValidation.valid
+                      ? 'border-slate-300'
+                      : 'border-rose-400 bg-rose-50/30'
+                    : 'border-slate-300'
+                }`}
               />
-              {startSerial && (
-                <div className="mt-1 text-[10px] text-emerald-800 font-bold flex items-center space-x-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                  <span>Serie inicial configurada ({quantity} TAG{quantity > 1 ? 's' : ''})</span>
-                </div>
+              {startSerial.trim() && (
+                startSerialValidation.valid ? (
+                  <div className="mt-1 text-[10px] text-emerald-800 font-bold flex items-center space-x-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+                    <span>TAG disponible en {station} ({quantity} TAG{quantity > 1 ? 's' : ''})</span>
+                  </div>
+                ) : (
+                  <div className="mt-1 p-2 rounded-lg bg-rose-50 border border-rose-200 text-[10px] text-rose-800 font-bold flex items-start space-x-1.5 leading-snug">
+                    <AlertCircle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0 mt-0.5" />
+                    <span>{startSerialValidation.error}</span>
+                  </div>
+                )
               )}
             </div>
 
