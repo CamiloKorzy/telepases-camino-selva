@@ -1,79 +1,117 @@
-# GUÍA DE OPERACIÓN Y MANUAL DE USO - PLATAFORMA TELEPASE
+# MANUAL COMPLETO Y GUÍA DE APRENDIZAJES - PLATAFORMA TELEPASE
 ## Corredor Vial Noreste - Camino Selva S.A.
 
-Este documento constituye el **Manual Oficial de Operación del Sistema TelePASE**. Contiene las instrucciones paso a paso para acceder, operar y administrar cada módulo de la plataforma web y de la Aplicación Móvil (APK).
+Bienvenido al **Manual Oficial de Operación de la Plataforma TelePASE**. Este documento está estructurado para que cualquier usuario, sin importar si es su primer día en la casilla de peaje o si es el Administrador General, aprenda a operar el sistema paso a paso con total claridad.
 
 ---
 
-## 1. Acceso a la Plataforma e Inicio de Sesión
-- **Dirección Web / APK**: Acceso a la interfaz web o mediante la app Android `TelePASE-CaminoSelva.apk`.
-- **Credenciales y Cuentas por Defecto**:
-  - **Administrador**: `camilo.k@ceeenriquez.com` / `admin@caminoselva.com` (Clave: `Cee$$2026`).
-  - **Operadores de Peaje**: `peaje.santa.ana@caminoselva.com`, `peaje.victoria@caminoselva.com`, `peaje.fachinal@caminoselva.com`, `peaje.ituzaingo@caminoselva.com`, `oficina.central@caminoselva.com` (Clave: `op123456`).
-  - **Consulta / Auditoría**: `consulta@caminoselva.com` (Clave: `consulta123`).
-- **Opción "Recordar mi usuario"**: Marque el tilde al ingresar para persisiti la dirección de correo en el navegador/dispositivo y evitar escribirlo en cada ingreso.
-- **Rendimiento de Login**: Autenticación inmediata con respuesta `<400ms` usando caché local de perfiles y sincronización en segundo plano con la base de datos Supabase.
+## 1. CONCEPTOS CLAVE ANTES DE EMPEZAR
+
+### 1.1. ¿Qué es una Oblea / TAG RFID?
+Un **TAG TelePASE** es una etiqueta/sticker adhesivo con un chip electrónico inteligente que se coloca en el parabrisas de los vehículos. 
+- Cada oblea tiene impreso un **Número de Serie único de 8 dígitos** (ejemplo: `63228500` o `63230000`).
+- No pueden existir dos vehículos con el mismo número de TAG.
+
+### 1.2. Puntos de Entrega Oficiales
+El Corredor Vial Noreste cuenta con 5 estaciones/depósitos registrados:
+1. **Santa Ana** (Peaje Ruta 12)
+2. **Colonia Victoria** (Peaje Ruta 12)
+3. **Paraje Fachinal** (Peaje Ruta 105)
+4. **Ituzaingó** (Peaje Ruta 12)
+5. **Oficina Central** (Depósito Central y Administración)
 
 ---
 
-## 2. Módulo de Registración de Entregas en Vía
-El módulo principal permite al personal del peaje registrar de manera rápida la entrega de obleas RFID a los conductores.
+## 2. EL CIRCUITO DE INVENTARIO (¿De dónde sale el stock?)
 
-### Pasos para registrar una entrega:
-1. **Seleccionar Punto de Entrega**: Elija la estación correspondiente (ej. *Santa Ana*, *Colonia Victoria*, *Paraje Fachinal*, *Ituzaingó*).
-2. **Dominio / Patente**: Ingrese el dominio del vehículo (ej. `AB123CD` o `AA111AA`).
-3. **DNI / CUIT**: Ingrese el número de documento o CUIT del titular.
-4. **Nombre Receptor**: Nombre completo o razón social de la persona o empresa receptora.
-5. **Replicación para Empresas / Flotas**: Si se registran varios vehículos de un mismo titular, presione los botones **"Replicar Nombre"** y **"Replicar CUIT"** para clonar automáticamente los datos al siguiente formulario.
-6. **Cantidad y TAG Serial**: El campo de cantidad inicia por defecto en 1. Ingrese o escanee el número de serie de la oblea (ej. `63230000`).
-7. **Registrar**: Al presionar **"REGISTRAR ENTREGA DE TAGS"**, el sistema realiza las siguientes validaciones:
-   - Controla que el TAG pertenezca al inventario o lote recibido en esa estación.
-   - Controla que el TAG no haya sido entregado anteriormente en ninguna estación.
-   - Limpia los campos automáticamente tras confirmar la registración.
+Para comprender por qué una oblea puede o no entregarse en vía, es fundamental conocer el viaje que hace el stock:
 
----
+```
+┌─────────────────┐       Alta de Lote        ┌─────────────────┐
+│ 1. FÁBRICA      │ ────────────────────────> │ 2. OF. CENTRAL  │
+└─────────────────┘                           └─────────────────┘
+                                                       │
+                                            Transferencia (Envío)
+                                                       │
+                                                       ▼
+┌─────────────────┐   Confirmar Recepción     ┌─────────────────┐
+│ 4. ENTREGA VÍA  │ <──────────────────────── │ 3. PEAJE DESTINO│
+│ (-1 disponible) │                           │ (Pend.Recepc.)  │
+└─────────────────┘                           └─────────────────┘
+```
 
-## 3. Módulo de Movimientos y Transferencias entre Estaciones
-Permite trasladar cajas/lotes de TAGs desde la **Oficina Central** hacia los distintos peajes del corredor o realizar transferencias inter-estación.
-
-### Enviar Transferencia (Estación Origen):
-1. Seleccionar **Estación Origen** y **Estación Destino**.
-2. Ingresar la **Serie Desde** y la **Serie Hasta** (ej. `63230000` al `63231499`).
-3. El sistema valida automáticamente que el rango complete la cantidad ingresada y que todos los TAGs pertenezcan activamente al inventario de la estación Origen.
-4. Al confirmar, el estado del remito pasa a **"En Tránsito"**.
-
-### Recepcionar Remito (Estación Destino):
-1. En la tarjeta indicadora de la estación Destino aparecerá el indicador **"Pend. Recepción"**.
-2. Al ingresar a la pestaña **Movimientos**, se visualizan las transferencias pendientes.
-3. Presione **"Confirmar Recepción"**. El estado cambiará a **"Recibido"** y las unidades se sumarán al stock disponible para entrega en vía de esa estación.
+1. **Ingreso a Oficina Central**: Cuando la empresa compra obleas a fábrica (ej. 20.000 unidades), el Administrador las registra en *Oficina Central* mediante la opción **Alta de Lotes**.
+2. **Transferencias a Peajes**: Oficina Central distribuye el stock enviando cajas/lotes a cada peaje (ej. 1.500 TAGs a Santa Ana). El envío queda en estado **"En Tránsito"** y en la tarjeta del peaje destino se enciende la alerta **"Pend. Recepción"**.
+3. **Confirmación en Peaje**: El operador del peaje abre la pestaña **Movimientos** y hace clic en el botón verde **"Confirmar Recepción"**. A partir de ese segundo, los TAGs quedan en estado **Disponible (disp.)** para entregarse a los conductores.
+4. **Entrega al Vehículo**: Cuando registras 1 entrega en la casilla, el stock *Disponible* baja en 1 unidad y el stock *Entregados* aumenta en 1.
 
 ---
 
-## 4. Módulo de Alta de Lotes de Fábrica (Administrador)
-Reservado para el Administrador general. Permite la registración de remitos de fábrica con la incorporación de nuevos bloques de series al stock del Corredor Vial (ej. Lote Inicial de 20.000 TAGs).
+## 3. PASO A PASO: ¿CÓMO REGISTRAR TU PRIMERA ENTREGA DE TAG?
+
+Sigue este procedimiento exacto cada vez que un vehículo se detenga a solicitar o instalar su TelePASE:
+
+### Paso 1: Revisa tu Punto de Entrega
+- En el formulario, el primer campo es **Punto de Entrega**. Debe coincidir con la estación donde estás ubicado (ej. *Santa Ana*).
+
+### Paso 2: Ingrese la Patente / Dominio
+- Tipea la patente del vehículo sin espacios ni guiones.
+- **Ejemplos válidos**: `AB123CD` (Mercosur) o `AA100BB` o `ABC123` (Formato anterior).
+
+### Paso 3: Ingrese DNI / CUIT y Nombre del Conductor
+- **DNI / CUIT**: Ingrese el número del titular o CUIT de la empresa (ej: `30712345678` o `20334445559`).
+- **Nombre Receptor**: Nombre completo del conductor o razón social (ej: *Juan Pérez* o *Transporte Misiones S.R.L.*).
+
+### Paso 4: Ingrese el Número de Serie del TAG
+- Tipea o escanea los 8 dígitos del sticker (ej: `63230000`). La cantidad siempre es **1**.
+
+### Paso 5: Presione "REGISTRAR ENTREGA DE TAGS"
+- El sistema guardará la operación, el formulario se limpiará de forma automática y la fila aparecerá al instante en la **Grilla de Entregas** de abajo.
 
 ---
 
-## 5. Módulo de Puntos de Entrega (Estaciones)
-Permite configurar los Puntos de Entrega oficiales y definir el **Stock Mínimo de Alerta**. Cuando el stock disponible en una estación cae por debajo de dicho umbral, la tarjeta indicadora cambia a alerta en color rojo.
+## 4. HERRAMIENTA ESPECIAL: REPLICACIÓN PARA FLOTAS Y EMPRESAS
+
+Si llega un chofer o apoderado a registrar **10 camiones de la misma empresa**:
+1. Registra el primer vehículo normalmente (*Nombre: Transporte Selva S.R.L.*, *CUIT: 30711112223*).
+2. Presiona los botones azules **"Replicar Nombre"** y **"Replicar CUIT"** al lado de los campos.
+3. Al presionar **Registrar Entrega**, el sistema guardará el primer camión pero **MANTENDRÁ RELLENADOS EL NOMBRE Y EL CUIT** para el siguiente formulario.
+4. Para los siguientes 9 camiones, solo tendrás que escribir la nueva Patente y el nuevo TAG. ¡Ahorras más del 70% del tiempo de carga!
 
 ---
 
-## 6. Módulo de Usuarios y Roles
-Gestión de usuarios y asignación de permisos:
-- **Administrador**: Acceso ilimitado, creación de usuarios, edición y eliminación de entregas, botón de "Limpiar Entregas".
-- **Operador**: Registro de entregas y transferencias de su estación.
-- **Consulta**: Solo lectura de reportes y stocks.
+## 5. GUÍA RÁPIDA DE RESOLUCIÓN DE MENSAJES DE ERROR
+
+### ❌ Error 1: "El TAG NO corresponde a ningún lote ni transferencia en la estación"
+- **¿Por qué ocurre?**: El número de TAG tipeado no pertenece al inventario cargado o recibido en tu peaje.
+- **¿Cómo solucionarlo?**: 
+  1. Verifica que no hayas cometido un error de tipeo en los dígitos del TAG.
+  2. Si el número es correcto, verifica en la pestaña **Movimientos** si el paquete de TAGs figura pendiente de recepción.
+
+### ⚠️ Error 2: "El TAG proviene de una transferencia PENDIENTE DE RECEPCIÓN"
+- **¿Por qué ocurre?**: La caja de TAGs fue enviada a tu peaje pero ningún operador ingresó aún a confirmar el remito.
+- **¿Cómo solucionarlo?**: Entra a la pestaña **Movimientos** y haz clic en el botón verde **"Confirmar Recepción"**. Luego vuelve al formulario y regístralo.
+
+### 🚫 Error 3: "El TAG ya fue entregado previamente"
+- **¿Por qué ocurre?**: Ese número de serie ya fue registrado en otro vehículo. No se permite duplicar entregas de obleas.
 
 ---
 
-## 7. Módulo de Auditoría de Operaciones
-Todas las operaciones realizadas por cualquier usuario o rol (incluso administradores) son registradas con sello de fecha, hora, usuario, rol y detalle en el **Log de Usuario**, accesible desde la pestaña **Auditoría**.
+## 6. USUARIOS, ROLES Y CLAVES DE RESPALDO
+
+| Rol de Usuario | Permisos y Funciones | Clave Maestra por Defecto |
+| :--- | :--- | :--- |
+| **Administrador** | Acceso total: Usuarios, Alta de Lotes, Edición/Eliminación de entregas y Botón "Limpiar Entregas". | `Cee$$2026` |
+| **Operador** | Trabajo en casilla: Registración de entregas en vía y confirmación de transferencias de su peaje. | `op123456` |
+| **Consulta** | Auditoría y Supervisión: Solo lectura de inventarios, tarjetas e informes. | `consulta123` |
+
+*Nota*: Se recomienda activar el tilde **"Recordar mi usuario"** en la pantalla de inicio de sesión para que el sistema recuerde tu correo y no tengas que volver a escribirlo.
 
 ---
 
-## 8. Exportación de Datos a Excel y CSV
-Desde la vista principal de entregas se puede filtrar el historial y exportar los reportes en formato **Excel (.xlsx)** o **CSV** conteniendo las 7 columnas exactas registradas:
+## 7. EXPORTACIÓN DE REPORTES (EXCEL Y CSV)
+
+Los botones **"Descargar XLS"** y **"CSV"** descargan los datos filtrados en pantalla conteniendo únicamente las **7 columnas oficiales**:
 1. **Fecha/Hora**
 2. **Punto de Entrega**
 3. **Patente**

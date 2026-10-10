@@ -18,6 +18,12 @@ import {
   Sparkles,
   ArrowRight,
   ShieldAlert,
+  AlertTriangle,
+  Info,
+  Copy,
+  QrCode,
+  Tag,
+  Car,
 } from 'lucide-react';
 
 interface UserGuideModalProps {
@@ -26,29 +32,29 @@ interface UserGuideModalProps {
 }
 
 export default function UserGuideModal({ isOpen, onClose }: UserGuideModalProps) {
-  const [activeTopic, setActiveTopic] = useState<'entregas' | 'transferencias' | 'lotes' | 'estaciones' | 'usuarios' | 'auditoria' | 'reportes'>('entregas');
+  const [activeTopic, setActiveTopic] = useState<'inicio' | 'paso_a_paso' | 'flotas' | 'circuito_stock' | 'errores' | 'roles' | 'reportes'>('inicio');
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="bg-white w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+      <div className="bg-white w-full max-w-5xl max-h-[92vh] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
         {/* Modal Header */}
         <div className="bg-cs-dark text-white p-4 sm:p-5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-emerald-500/20 text-emerald-300 rounded-xl border border-emerald-500/30">
+            <div className="p-2.5 bg-emerald-500/20 text-emerald-300 rounded-xl border border-emerald-500/30">
               <BookOpen className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold">Guía de Operación y Manual del Sistema TelePASE</h2>
+              <h2 className="text-base sm:text-lg font-bold">Manual de Aprendizaje y Guía Paso a Paso - TelePASE</h2>
               <p className="text-xs text-emerald-200">
-                Instrucciones paso a paso para el uso de cada módulo de la plataforma
+                Aprende a operar el sistema desde cero: Entregas, Inventarios, Transferencias y Solución de Errores
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition"
+            className="p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -57,306 +63,399 @@ export default function UserGuideModal({ isOpen, onClose }: UserGuideModalProps)
         {/* Modal Body with Sidebar Navigation */}
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           {/* Menu Lateral de Temas */}
-          <div className="w-full md:w-64 bg-slate-50 border-r border-slate-200 p-3 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-y-auto flex-shrink-0">
+          <div className="w-full md:w-64 bg-slate-50 border-r border-slate-200 p-3 flex flex-row md:flex-col gap-1.5 overflow-x-auto md:overflow-y-auto flex-shrink-0">
             <button
-              onClick={() => setActiveTopic('entregas')}
-              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition ${
-                activeTopic === 'entregas'
+              onClick={() => setActiveTopic('inicio')}
+              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition cursor-pointer ${
+                activeTopic === 'inicio'
+                  ? 'bg-cs-primary text-white shadow-sm'
+                  : 'text-slate-700 hover:bg-slate-200/60'
+              }`}
+            >
+              <Info className="w-4 h-4 flex-shrink-0" />
+              <span>1. Conceptos Básicos</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTopic('paso_a_paso')}
+              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition cursor-pointer ${
+                activeTopic === 'paso_a_paso'
                   ? 'bg-cs-primary text-white shadow-sm'
                   : 'text-slate-700 hover:bg-slate-200/60'
               }`}
             >
               <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-              <span>1. Entrega de TAGs</span>
+              <span>2. Registrar Entrega (Paso a Paso)</span>
             </button>
 
             <button
-              onClick={() => setActiveTopic('transferencias')}
-              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition ${
-                activeTopic === 'transferencias'
+              onClick={() => setActiveTopic('flotas')}
+              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition cursor-pointer ${
+                activeTopic === 'flotas'
+                  ? 'bg-cs-primary text-white shadow-sm'
+                  : 'text-slate-700 hover:bg-slate-200/60'
+              }`}
+            >
+              <Copy className="w-4 h-4 flex-shrink-0" />
+              <span>3. Replicación Flotas / Empresas</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTopic('circuito_stock')}
+              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition cursor-pointer ${
+                activeTopic === 'circuito_stock'
                   ? 'bg-cs-primary text-white shadow-sm'
                   : 'text-slate-700 hover:bg-slate-200/60'
               }`}
             >
               <Truck className="w-4 h-4 flex-shrink-0" />
-              <span>2. Movimientos / Envíos</span>
+              <span>4. Circuito de Stock & Envíos</span>
             </button>
 
             <button
-              onClick={() => setActiveTopic('lotes')}
-              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition ${
-                activeTopic === 'lotes'
+              onClick={() => setActiveTopic('errores')}
+              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition cursor-pointer ${
+                activeTopic === 'errores'
                   ? 'bg-cs-primary text-white shadow-sm'
                   : 'text-slate-700 hover:bg-slate-200/60'
               }`}
             >
-              <PackageCheck className="w-4 h-4 flex-shrink-0" />
-              <span>3. Alta de Lotes</span>
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-300" />
+              <span>5. Solución de Mensajes de Error</span>
             </button>
 
             <button
-              onClick={() => setActiveTopic('estaciones')}
-              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition ${
-                activeTopic === 'estaciones'
-                  ? 'bg-cs-primary text-white shadow-sm'
-                  : 'text-slate-700 hover:bg-slate-200/60'
-              }`}
-            >
-              <MapPin className="w-4 h-4 flex-shrink-0" />
-              <span>4. Puntos de Entrega</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTopic('usuarios')}
-              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition ${
-                activeTopic === 'usuarios'
+              onClick={() => setActiveTopic('roles')}
+              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition cursor-pointer ${
+                activeTopic === 'roles'
                   ? 'bg-cs-primary text-white shadow-sm'
                   : 'text-slate-700 hover:bg-slate-200/60'
               }`}
             >
               <Users className="w-4 h-4 flex-shrink-0" />
-              <span>5. Usuarios y Roles</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTopic('auditoria')}
-              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition ${
-                activeTopic === 'auditoria'
-                  ? 'bg-cs-primary text-white shadow-sm'
-                  : 'text-slate-700 hover:bg-slate-200/60'
-              }`}
-            >
-              <ShieldAlert className="w-4 h-4 flex-shrink-0" />
-              <span>6. Auditoría y Logs</span>
+              <span>6. Roles y Claves de Respaldo</span>
             </button>
 
             <button
               onClick={() => setActiveTopic('reportes')}
-              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition ${
+              className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center space-x-2 transition cursor-pointer ${
                 activeTopic === 'reportes'
                   ? 'bg-cs-primary text-white shadow-sm'
                   : 'text-slate-700 hover:bg-slate-200/60'
               }`}
             >
               <FileSpreadsheet className="w-4 h-4 flex-shrink-0" />
-              <span>7. Excel / CSV</span>
+              <span>7. Exportar Excel / CSV</span>
             </button>
           </div>
 
           {/* Contenido Principal de las Guías */}
-          <div className="flex-1 p-5 overflow-y-auto space-y-4 text-slate-800 text-sm">
-            {/* TEMA 1: ENTREGAS DE TAGS EN VÍA */}
-            {activeTopic === 'entregas' && (
+          <div className="flex-1 p-5 sm:p-6 overflow-y-auto space-y-5 text-slate-800 text-sm">
+            {/* TEMA 1: CONCEPTOS BÁSICOS */}
+            {activeTopic === 'inicio' && (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
+                  <Info className="w-5 h-5 text-cs-primary" />
+                  <h3 className="font-bold text-base text-slate-900">1. ¿Qué es la Plataforma TelePASE y cómo funciona?</h3>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Esta plataforma fue diseñada para que el personal de peaje de **Camino Selva S.A.** pueda registrar en segundos la entrega de obleas TelePASE a los conductores, controlar el inventario de obleas asignadas a cada peaje y rastrear los envíos entre estaciones.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="p-4 bg-emerald-50/60 border border-emerald-200/80 rounded-2xl space-y-2">
+                    <div className="flex items-center space-x-2 font-bold text-emerald-900 text-xs">
+                      <Tag className="w-4 h-4 text-emerald-600" />
+                      <span>¿Qué es el Número de TAG Serial?</span>
+                    </div>
+                    <p className="text-xs text-emerald-950 leading-relaxed">
+                      Es un código numérico único impreso en el sticker/oblea RFID (ej: <code className="bg-emerald-100 px-1.5 py-0.5 rounded font-mono font-bold text-emerald-900">63230000</code>). Este número identifica la tarjeta que se pega en el parabrisas del vehículo.
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-sky-50/60 border border-sky-200/80 rounded-2xl space-y-2">
+                    <div className="flex items-center space-x-2 font-bold text-sky-900 text-xs">
+                      <MapPin className="w-4 h-4 text-sky-600" />
+                      <span>¿Cuáles son los Puntos de Entrega?</span>
+                    </div>
+                    <p className="text-xs text-sky-950 leading-relaxed">
+                      Son las 5 estaciones oficiales del corredor: <b>Santa Ana</b>, <b>Colonia Victoria</b>, <b>Paraje Fachinal</b>, <b>Ituzaingó</b> y <b>Oficina Central</b>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Banner de Inicio Rápido */}
+                <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-2">
+                  <div className="flex items-center space-x-2 font-bold text-xs text-emerald-400">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Regla de Oro en Peaje:</span>
+                  </div>
+                  <p className="text-xs text-slate-200 leading-relaxed">
+                    Un TAG solo se puede entregar en vía si se encuentra **FÍSICAMENTE Y EN SISTEMA** asignado a la estación donde trabajas. Si el sistema dice que el TAG no pertenece a tu estación, debes confirmar la recepción en la pestaña <b>Movimientos</b>.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* TEMA 2: PASO A PASO "MI PRIMERA ENTREGA" */}
+            {activeTopic === 'paso_a_paso' && (
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
                   <CheckCircle2 className="w-5 h-5 text-cs-primary" />
-                  <h3 className="font-bold text-base text-slate-900">1. Registración Agil de Entregas de TAGs</h3>
+                  <h3 className="font-bold text-base text-slate-900">2. Guía Paso a Paso: ¿Cómo registrar una Entrega de TAG?</h3>
                 </div>
 
                 <p className="text-xs text-slate-600">
-                  Formulario simplificado para la entrega directa en vía a conductores. Optimizado para pantallas táctiles y celulares.
+                  Sigue esta secuencia exacta cuando un vehículo se detiene a solicitar o colocar su TelePASE:
                 </p>
 
-                <div className="bg-emerald-50/70 border border-emerald-200 p-3.5 rounded-xl space-y-2 text-xs">
-                  <div className="font-bold text-emerald-900 flex items-center space-x-1.5">
-                    <Sparkles className="w-4 h-4 text-emerald-600" />
-                    <span>Pasos para registrar una entrega:</span>
-                  </div>
-                  <ol className="list-decimal list-inside space-y-1 text-emerald-950 font-medium">
-                    <li>Seleccione el <b>Punto de Entrega</b> (Santa Ana, Victoria, Fachinal, Ituzaingó, etc.).</li>
-                    <li>Ingrese la <b>Patente / Dominio</b> del vehículo y el <b>DNI / CUIT</b> del titular.</li>
-                    <li>Ingrese el <b>Nombre Receptor</b> y verifique la cantidad de TAGs a entregar.</li>
-                    <li>Escriba o escanee el número de <b>Serie del TAG RFID</b>.</li>
-                    <li>Haga clic en <b>REGISTRAR ENTREGA DE TAGS</b>.</li>
-                  </ol>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                    <b className="text-slate-900 flex items-center space-x-1">
-                      <Users className="w-3.5 h-3.5 text-cs-primary" />
-                      <span>Replicar Datos Empresa / Flota</span>
-                    </b>
-                    <p className="text-slate-600">
-                      Utilice el botón <b>"Replicar Nombre y CUIT"</b> para mantener el titular al registrar varios vehículos de una misma empresa.
-                    </p>
+                {/* Mockup Interactivo de Pasos */}
+                <div className="space-y-3">
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-start space-x-3">
+                    <div className="w-6 h-6 rounded-full bg-cs-primary text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
+                      1
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <b className="text-slate-900 text-sm">Verifica tu Punto de Entrega Seleccionado</b>
+                      <p className="text-slate-600">
+                        El primer campo del formulario es <b>Punto de Entrega</b>. Debe coincidir con el peaje donde estás trabajando (ej: <i>Santa Ana</i>).
+                      </p>
+                    </div>
                   </div>
 
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-                    <b className="text-slate-900 flex items-center space-x-1">
-                      <ShieldCheck className="w-3.5 h-3.5 text-cs-primary" />
-                      <span>Validación de Stock Origen</span>
-                    </b>
-                    <p className="text-slate-600">
-                      El sistema verifica en tiempo real que el TAG pertenezca al Punto de Entrega seleccionado y que no haya sido entregado.
-                    </p>
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-start space-x-3">
+                    <div className="w-6 h-6 rounded-full bg-cs-primary text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
+                      2
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <b className="text-slate-900 text-sm">Ingresa la Patente / Dominio del Vehículo</b>
+                      <p className="text-slate-600">
+                        Escribe la patente sin espacios ni guiones. Ejemplos válidos: <code className="bg-slate-200 px-1 py-0.5 rounded font-mono font-bold">AB123CD</code> o <code className="bg-slate-200 px-1 py-0.5 rounded font-mono font-bold">AA100BB</code>.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-start space-x-3">
+                    <div className="w-6 h-6 rounded-full bg-cs-primary text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
+                      3
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <b className="text-slate-900 text-sm">Ingresa DNI / CUIT y Nombre del Conductor</b>
+                      <p className="text-slate-600">
+                        Escribe el número de documento o CUIT (ej: <code className="bg-slate-200 px-1 py-0.5 rounded font-mono font-bold">30712345678</code>) y el nombre completo del conductor o razón social de la empresa.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-start space-x-3">
+                    <div className="w-6 h-6 rounded-full bg-cs-primary text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
+                      4
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <b className="text-slate-900 text-sm">Ingresa el Número de Serie del TAG RFID</b>
+                      <p className="text-slate-600">
+                        Tipea o escanea el código de 8 dígitos del sticker (ej: <code className="bg-emerald-100 text-emerald-900 px-1 py-0.5 rounded font-mono font-bold">63230000</code>).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl flex items-start space-x-3">
+                    <div className="w-6 h-6 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
+                      5
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <b className="text-emerald-950 text-sm">Presiona "REGISTRAR ENTREGA DE TAGS"</b>
+                      <p className="text-emerald-900">
+                        ¡Listo! El formulario se limpiará automáticamente para la siguiente entrega, la disponibilidad de la estación se actualizará y la fila aparecerá en la grilla de abajo.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* TEMA 2: MOVIMIENTOS Y TRANSFERENCIAS */}
-            {activeTopic === 'transferencias' && (
+            {/* TEMA 3: REPLICACIÓN FLOTAS / EMPRESAS */}
+            {activeTopic === 'flotas' && (
+              <div className="space-y-4">
+                <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
+                  <Copy className="w-5 h-5 text-cs-primary" />
+                  <h3 className="font-bold text-base text-slate-900">3. Replicación de Nombre y CUIT para Empresas y Flotas</h3>
+                </div>
+
+                <p className="text-xs text-slate-600">
+                  ¿Llegó un chofer o apoderado a registrar **10 camiones de la misma empresa**? No pierdas tiempo escribiendo la misma razón social y CUIT 10 veces.
+                </p>
+
+                <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl space-y-3 text-xs">
+                  <b className="text-sky-900 text-sm flex items-center space-x-1.5">
+                    <Sparkles className="w-4 h-4 text-sky-600" />
+                    <span>Cómo usar los botones de replicación:</span>
+                  </b>
+
+                  <ol className="list-decimal list-inside space-y-2 text-sky-950">
+                    <li>Completa los datos del **primer vehículo** normalmente (Nombre: <i>Transporte Selva S.R.L.</i>, CUIT: <i>30711112223</i>).</li>
+                    <li>Antes de enviar, presiona los botones azules **"Replicar Nombre"** y **"Replicar CUIT"** que están junto a los campos.</li>
+                    <li>Al hacer clic en **Registrar Entrega**, el sistema guardará el primer vehículo pero **MANTENDRÁ EL NOMBRE Y EL CUIT RELLENADOS** para el siguiente formulario.</li>
+                    <li>Para el segundo camión, solo tendrás que escribir la nueva Patente y el nuevo TAG. ¡Ahorras más del 70% del tiempo de carga!</li>
+                  </ol>
+                </div>
+              </div>
+            )}
+
+            {/* TEMA 4: CIRCUITO DE STOCK & ENVÍOS */}
+            {activeTopic === 'circuito_stock' && (
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
                   <Truck className="w-5 h-5 text-cs-primary" />
-                  <h3 className="font-bold text-base text-slate-900">2. Movimientos y Transferencias entre Estaciones</h3>
+                  <h3 className="font-bold text-base text-slate-900">4. ¿De dónde sale el Stock? (Circuito de Inventario)</h3>
                 </div>
 
-                <p className="text-xs text-slate-600">
-                  Permite mover lotes de TAGs entre la Oficina Central y los Peajes del Corredor Vial Noreste.
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Entiende cómo viaja una oblea TelePASE desde que la empresa la compra hasta que la entregas en la casilla:
                 </p>
 
-                <div className="space-y-2 text-xs">
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
-                    <b className="text-amber-900 flex items-center space-x-1">
-                      <ArrowRight className="w-4 h-4 text-amber-600" />
-                      <span>1. Enviar Transferencia (Origen)</span>
-                    </b>
-                    <p className="text-amber-950">
-                      Seleccione Origen, Destino y el rango de series (<b>Serie Desde</b> y <b>Serie Hasta</b>). El sistema validará que los TAGs se encuentren físicamente en el origen. Al enviar, el estado pasa a <b>"En Tránsito"</b>.
-                    </p>
-                  </div>
-
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
-                    <b className="text-emerald-900 flex items-center space-x-1">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>2. Recepcionar Remito (Destino)</span>
-                    </b>
-                    <p className="text-emerald-950">
-                      El peaje de destino visualizará la alerta <b>"Pend. Recepción"</b> en su tarjeta. Debe hacer clic en <b>"Confirmar Recepción"</b> para sumar las unidades a su stock disponible y poder entregarlas.
-                    </p>
+                {/* Diagrama Visual */}
+                <div className="p-4 bg-slate-900 text-white rounded-2xl space-y-3 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-center">
+                    <div className="p-2.5 bg-slate-800 rounded-xl border border-slate-700">
+                      <div className="font-bold text-emerald-400">1. Fábrica</div>
+                      <div className="text-[10px] text-slate-300 mt-1">Lote inicial de 20.000 TAGs</div>
+                    </div>
+                    <div className="p-2.5 bg-slate-800 rounded-xl border border-slate-700">
+                      <div className="font-bold text-emerald-400">2. Oficina Central</div>
+                      <div className="text-[10px] text-slate-300 mt-1">Envía transferencias a los peajes</div>
+                    </div>
+                    <div className="p-2.5 bg-slate-800 rounded-xl border border-slate-700">
+                      <div className="font-bold text-emerald-400">3. Peaje Destino</div>
+                      <div className="text-[10px] text-slate-300 mt-1">Confirma "Pend. Recepción"</div>
+                    </div>
+                    <div className="p-2.5 bg-slate-800 rounded-xl border border-slate-700">
+                      <div className="font-bold text-emerald-400">4. Entrega en Vía</div>
+                      <div className="text-[10px] text-slate-300 mt-1">Se entrega al auto (-1 disp.)</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* TEMA 3: ALTA DE LOTES */}
-            {activeTopic === 'lotes' && (
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
-                  <PackageCheck className="w-5 h-5 text-cs-primary" />
-                  <h3 className="font-bold text-base text-slate-900">3. Recepción y Alta de Lotes de Fábrica</h3>
-                </div>
-
-                <p className="text-xs text-slate-600">
-                  Reservado para Administradores. Registra la incorporación de nuevos lotes de fábrica de TAGs RFID al inventario.
-                </p>
-
-                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
-                  <b className="text-slate-900">Campos obligatorios:</b>
-                  <ul className="list-disc list-inside space-y-1 text-slate-700">
-                    <li><b>Punto de Entrega</b>: Generalmente <i>Oficina Central</i>.</li>
-                    <li><b>Serie Desde / Serie Hasta</b>: Rango numérico del remito.</li>
-                    <li><b>Cantidad</b>: Unidades calculadas de forma automática.</li>
-                    <li><b>Número de Remito / Observaciones</b>.</li>
+                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5 text-xs">
+                  <b className="text-amber-900 flex items-center space-x-1">
+                    <Truck className="w-4 h-4 text-amber-600" />
+                    <span>Indicadores de las Tarjetas de Estación:</span>
+                  </b>
+                  <ul className="list-disc list-inside space-y-1 text-amber-950 font-medium">
+                    <li><b>Disponible (disp.)</b>: Cantidad de TAGs que tu peaje tiene listos para entregar ya mismo.</li>
+                    <li><b>Entregados</b>: TAGs que ya fueron colocados en vehículos en tu estación.</li>
+                    <li><b>Enviados</b>: TAGs que tu estación envió mediante transferencias a otros peajes.</li>
+                    <li><b>Pend. Recepción</b>: TAGs que vienen en viaje hacia tu peaje. Debes presionar "Confirmar Recepción" en la pestaña Movimientos.</li>
                   </ul>
                 </div>
               </div>
             )}
 
-            {/* TEMA 4: PUNTOS DE ENTREGA */}
-            {activeTopic === 'estaciones' && (
+            {/* TEMA 5: SOLUCIÓN DE ERRORES FRECUENTES */}
+            {activeTopic === 'errores' && (
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
-                  <MapPin className="w-5 h-5 text-cs-primary" />
-                  <h3 className="font-bold text-base text-slate-900">4. Maestro de Puntos de Entrega</h3>
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  <h3 className="font-bold text-base text-slate-900">5. Guía de Solución de Errores Frecuentes</h3>
                 </div>
 
-                <p className="text-xs text-slate-600">
-                  Gestión de las estaciones oficiales: Santa Ana, Colonia Victoria, Paraje Fachinal, Ituzaingó y Oficina Central.
-                </p>
+                <div className="space-y-3 text-xs">
+                  <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-1">
+                    <b className="text-rose-900 text-sm">❌ Error: "El TAG NO corresponde a ningún lote ni transferencia en la estación"</b>
+                    <p className="text-rose-950">
+                      <b>¿Por qué ocurre?</b> Tipeaste un número de TAG que físicamente pertenece a otro peaje o que aún no fue cargado en el sistema.
+                    </p>
+                    <p className="text-rose-900 font-semibold">
+                      <b>Solución:</b> Revisa que no hayas ingresado mal algún número. Si el número es correcto, consulta en la pestaña <b>Movimientos</b> si el remito figura como "En Tránsito".
+                    </p>
+                  </div>
 
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
-                  <b className="text-slate-900">Configuración de Alertas:</b>
-                  <p className="text-slate-700">
-                    Se puede definir el <b>Stock Mínimo de Alerta</b> para destacar la tarjeta en color rojo cuando las unidades disponibles desciendan del umbral configurado.
-                  </p>
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
+                    <b className="text-amber-900 text-sm">⚠️ Error: "El TAG proviene de una transferencia PENDIENTE DE RECEPCIÓN"</b>
+                    <p className="text-amber-950">
+                      <b>¿Por qué ocurre?</b> La caja de TAGs llegó al peaje pero ningún operador entró al sistema a confirmar la recepción.
+                    </p>
+                    <p className="text-amber-900 font-semibold">
+                      <b>Solución:</b> Haz clic en la pestaña <b>Movimientos</b> y presiona el botón verde <b>"Confirmar Recepción"</b>. Luego vuelve al formulario y regístralo.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-xl space-y-1">
+                    <b className="text-slate-900 text-sm">🚫 Error: "El TAG ya fue entregado previamente"</b>
+                    <p className="text-slate-700">
+                      <b>¿Por qué ocurre?</b> Ese número de oblea ya figura registrado a otro vehículo. El sistema no permite entregar el mismo TAG dos veces.
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* TEMA 5: USUARIOS Y ROLES */}
-            {activeTopic === 'usuarios' && (
+            {/* TEMA 6: ROLES Y CLAVES */}
+            {activeTopic === 'roles' && (
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
                   <Users className="w-5 h-5 text-cs-primary" />
-                  <h3 className="font-bold text-base text-slate-900">5. Usuarios, Roles y Claves de Respaldo</h3>
+                  <h3 className="font-bold text-base text-slate-900">6. Permisos de Usuario y Claves Maestras por Defecto</h3>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
-                    <b className="text-amber-900">Rol Administrador</b>
-                    <p className="text-amber-950">Acceso total, edición/eliminación de entregas, botón "Limpiar Entregas". Clave: <code className="font-mono font-bold text-slate-900">Cee$$2026</code>.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 text-xs">
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl space-y-1.5">
+                    <b className="text-amber-900 text-sm">Rol Administrador</b>
+                    <p className="text-amber-950 leading-relaxed">
+                      Acceso total. Puede gestionar usuarios, crear lotes de fábrica, editar entregas o limpiar la base de datos.
+                    </p>
+                    <div className="pt-1 font-mono font-bold text-slate-900 bg-amber-100 p-1.5 rounded text-center">
+                      Clave: Cee$$2026
+                    </div>
                   </div>
 
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
-                    <b className="text-emerald-900">Rol Operador</b>
-                    <p className="text-emerald-950">Registro de entregas en vía y movimientos de su estación. Clave: <code className="font-mono font-bold text-slate-900">op123456</code>.</p>
+                  <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-1.5">
+                    <b className="text-emerald-900 text-sm">Rol Operador</b>
+                    <p className="text-emerald-950 leading-relaxed">
+                      Perfil para trabajo diario en casilla de peaje. Registra entregas y confirma transferencias.
+                    </p>
+                    <div className="pt-1 font-mono font-bold text-slate-900 bg-emerald-100 p-1.5 rounded text-center">
+                      Clave: op123456
+                    </div>
                   </div>
 
-                  <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl space-y-1">
-                    <b className="text-sky-900">Rol Consulta</b>
-                    <p className="text-sky-950">Acceso de solo lectura para auditoría y consulta de stock. Clave: <code className="font-mono font-bold text-slate-900">consulta123</code>.</p>
+                  <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-2xl space-y-1.5">
+                    <b className="text-sky-900 text-sm">Rol Consulta</b>
+                    <p className="text-sky-950 leading-relaxed">
+                      Perfil de auditoría y supervisión. Solo lectura de stocks e informes (no puede registrar ni editar).
+                    </p>
+                    <div className="pt-1 font-mono font-bold text-slate-900 bg-sky-100 p-1.5 rounded text-center">
+                      Clave: consulta123
+                    </div>
                   </div>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-                  <b className="text-slate-900 flex items-center space-x-1">
-                    <Lock className="w-3.5 h-3.5 text-cs-primary" />
-                    <span>Opción "Recordar mi usuario"</span>
-                  </b>
-                  <p className="text-slate-600">
-                    Al marcar la casilla en el Login, el correo del usuario queda guardado para evitar tener que tipearlo en cada inicio de sesión.
-                  </p>
                 </div>
               </div>
             )}
 
-            {/* TEMA 6: AUDITORÍA */}
-            {activeTopic === 'auditoria' && (
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
-                  <ShieldAlert className="w-5 h-5 text-cs-primary" />
-                  <h3 className="font-bold text-base text-slate-900">6. Log de Usuarios y Registro de Auditoría</h3>
-                </div>
-
-                <p className="text-xs text-slate-600">
-                  Toda operación realizada (inicio de sesión, registraciones, transferencias, ediciones y eliminaciones) es guardada en un registro de auditoría inalterable.
-                </p>
-
-                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-xs">
-                  <b className="text-slate-900">Auditoría de Rol Administrador:</b>
-                  <p className="text-slate-700">
-                    Incluso el uso de funciones administrativas (como la limpieza de datos o edición de entregas) queda registrado indicando fecha, hora, usuario y dirección de la operación.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* TEMA 7: EXPORTACIÓN A EXCEL Y CSV */}
+            {/* TEMA 7: EXPORTACIÓN DE REPORTES */}
             {activeTopic === 'reportes' && (
               <div className="space-y-4">
                 <div className="flex items-center space-x-2 border-b border-slate-200 pb-3">
                   <FileSpreadsheet className="w-5 h-5 text-cs-primary" />
-                  <h3 className="font-bold text-base text-slate-900">7. Exportación a Excel (.xlsx) y CSV</h3>
+                  <h3 className="font-bold text-base text-slate-900">7. Descarga de Reportes en Excel (.xlsx) y CSV</h3>
                 </div>
 
                 <p className="text-xs text-slate-600">
-                  Descarga instantánea de los registros filtrados en pantalla con las 7 columnas oficiales:
+                  Los botones <b>"Descargar XLS"</b> y <b>"CSV"</b> generan un reporte exacto de lo que ves filtrado en la pantalla.
                 </p>
 
-                <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-2">
-                  <b className="text-emerald-900">Columnas de los Reportes:</b>
-                  <ol className="list-decimal list-inside space-y-1 text-emerald-950 font-mono font-medium">
-                    <li>Fecha/Hora</li>
-                    <li>Punto de Entrega</li>
-                    <li>Patente</li>
-                    <li>TAG Serial</li>
-                    <li>DNI / CUIT</li>
-                    <li>Nombre Receptor</li>
-                    <li>Usuario Registrador</li>
-                  </ol>
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-2 text-xs">
+                  <b className="text-emerald-900">Columnas oficiales del archivo Excel:</b>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono font-bold text-emerald-950 pt-1">
+                    <div className="p-2 bg-emerald-100/70 rounded">1. Fecha/Hora</div>
+                    <div className="p-2 bg-emerald-100/70 rounded">2. Punto de Entrega</div>
+                    <div className="p-2 bg-emerald-100/70 rounded">3. Patente</div>
+                    <div className="p-2 bg-emerald-100/70 rounded">4. TAG Serial</div>
+                    <div className="p-2 bg-emerald-100/70 rounded">5. DNI / CUIT</div>
+                    <div className="p-2 bg-emerald-100/70 rounded">6. Nombre Receptor</div>
+                    <div className="p-2 bg-emerald-100/70 rounded col-span-2">7. Usuario Registrador</div>
+                  </div>
                 </div>
               </div>
             )}
@@ -364,10 +463,13 @@ export default function UserGuideModal({ isOpen, onClose }: UserGuideModalProps)
         </div>
 
         {/* Modal Footer */}
-        <div className="bg-slate-100 p-4 border-t border-slate-200 flex justify-end flex-shrink-0">
+        <div className="bg-slate-100 p-4 border-t border-slate-200 flex justify-between items-center flex-shrink-0">
+          <div className="text-xs text-slate-500 font-medium hidden sm:block">
+            Plataforma TelePASE • Corredor Vial Noreste - Camino Selva S.A.
+          </div>
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-cs-primary hover:bg-cs-dark text-white font-bold text-xs rounded-xl shadow-xs transition"
+            className="px-6 py-2 bg-cs-primary hover:bg-cs-dark text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
           >
             Entendido / Cerrar Guía
           </button>
