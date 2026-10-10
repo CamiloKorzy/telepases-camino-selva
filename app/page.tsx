@@ -13,7 +13,8 @@ import TransferManagement from '@/components/TransferManagement';
 import ScheduledReportModal from '@/components/ScheduledReportModal';
 import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName, DEFAULT_BATCHES } from '@/lib/deliveryPoints';
 import ActivationDocManagement, { getActivationDocConfig, generateWhatsAppLink } from '@/components/ActivationDocManagement';
-import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText } from 'lucide-react';
+import BackupRestoreModal from '@/components/BackupRestoreModal';
+import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText, Database } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
 
 export default function AntigravityDashboard() {
@@ -26,6 +27,7 @@ export default function AntigravityDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users' | 'settings_docs'>('dashboard');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
 
   const docConfig = useMemo(() => getActivationDocConfig(), [activeTab]);
 
@@ -664,6 +666,15 @@ export default function AntigravityDashboard() {
             </div>
 
             <button
+              onClick={() => setIsBackupModalOpen(true)}
+              className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300/80 rounded-xl transition flex items-center space-x-1 text-xs font-bold shadow-2xs"
+              title="Respaldar o Migrar Datos entre Dominios"
+            >
+              <Database className="w-4 h-4 text-amber-700" />
+              <span className="hidden sm:inline">Respaldar / Migrar</span>
+            </button>
+
+            <button
               onClick={fetchData}
               className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
               title="Recargar Datos"
@@ -1205,6 +1216,12 @@ export default function AntigravityDashboard() {
         isOpen={isReportModalOpen}
         onClose={() => setIsReportModalOpen(false)}
         stocks={stocks}
+      />
+
+      <BackupRestoreModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+        onDataRestored={fetchData}
       />
 
       <ConfirmModal
