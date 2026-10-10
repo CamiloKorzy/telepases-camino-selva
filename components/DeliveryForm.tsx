@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { TagDelivery, UserSession } from '@/types/database';
-import { getMasterDeliveryPoints, fixUserName } from '@/lib/deliveryPoints';
+import { getMasterDeliveryPoints } from '@/lib/deliveryPoints';
 import { validateTagDelivery, refreshInventoryCache, getFirstAvailableTagForStation } from '@/lib/inventoryValidation';
 import { logUserAction } from '@/lib/auditLogger';
-import { CheckCircle2, AlertCircle, Save, Car, User, Users, Truck, Copy, Plus, RefreshCw, Hash, Mail, Phone, Zap, FileSpreadsheet } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Car, User, Truck, Copy, RefreshCw, Hash, Zap } from 'lucide-react';
 
 interface DeliveryFormProps {
   currentUser: UserSession;
@@ -19,8 +19,6 @@ interface DeliveryRow {
   dominio: string;
   dniCuit: string;
   nombre: string;
-  emailContacto?: string;
-  celularContacto?: string;
 }
 
 export default function DeliveryForm({ currentUser, onDeliverySuccess }: DeliveryFormProps) {
@@ -32,10 +30,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
   const [station, setStation] = useState<string>(defaultStation);
   const [startSerial, setStartSerial] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1); // DEFAULT ES 1 TAG
-  const [sharedDniCuit, setSharedDniCuit] = useState<string>('');
   const [sharedNombre, setSharedNombre] = useState<string>('');
-  const [sharedEmail, setSharedEmail] = useState<string>('');
-  const [sharedCelular, setSharedCelular] = useState<string>('');
   const [observaciones, setObservaciones] = useState<string>('');
   const [rows, setRows] = useState<DeliveryRow[]>([]);
 
@@ -98,10 +93,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           id: String(i + 1),
           tagSerial: `${cleanStart}-${i + 1}`,
           dominio: rows[i]?.dominio || '',
-          dniCuit: rows[i]?.dniCuit || sharedDniCuit,
+          dniCuit: rows[i]?.dniCuit || '',
           nombre: rows[i]?.nombre || sharedNombre,
-          emailContacto: rows[i]?.emailContacto || sharedEmail,
-          celularContacto: rows[i]?.celularContacto || sharedCelular,
         }))
       );
       return;
@@ -128,10 +121,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           id: String(foundCount + 1),
           tagSerial: serialFormatted,
           dominio: rows[existingIdx]?.dominio || '',
-          dniCuit: rows[existingIdx]?.dniCuit || sharedDniCuit,
+          dniCuit: rows[existingIdx]?.dniCuit || '',
           nombre: rows[existingIdx]?.nombre || sharedNombre,
-          emailContacto: rows[existingIdx]?.emailContacto || sharedEmail,
-          celularContacto: rows[existingIdx]?.celularContacto || sharedCelular,
         });
         foundCount++;
       }
@@ -147,10 +138,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
           id: String(i + 1),
           tagSerial: serialFormatted,
           dominio: rows[i]?.dominio || '',
-          dniCuit: rows[i]?.dniCuit || sharedDniCuit,
+          dniCuit: rows[i]?.dniCuit || '',
           nombre: rows[i]?.nombre || sharedNombre,
-          emailContacto: rows[i]?.emailContacto || sharedEmail,
-          celularContacto: rows[i]?.celularContacto || sharedCelular,
         });
       }
     }
@@ -170,24 +159,9 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     );
   };
 
-  const handleReplicateHeaderDni = () => {
-    if (!sharedDniCuit.trim()) return;
-    setRows((prev) => prev.map((r) => ({ ...r, dniCuit: sharedDniCuit.trim() })));
-  };
-
   const handleReplicateHeaderNombre = () => {
     if (!sharedNombre.trim()) return;
     setRows((prev) => prev.map((r) => ({ ...r, nombre: sharedNombre.trim() })));
-  };
-
-  const handleReplicateHeaderEmail = () => {
-    if (!sharedEmail.trim()) return;
-    setRows((prev) => prev.map((r) => ({ ...r, emailContacto: sharedEmail.trim() })));
-  };
-
-  const handleReplicateHeaderCelular = () => {
-    if (!sharedCelular.trim()) return;
-    setRows((prev) => prev.map((r) => ({ ...r, celularContacto: sharedCelular.trim() })));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -208,7 +182,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     }
 
     // Validar que cada fila tenga Dominio y DNI/CUIT cargados
-    const invalidRow = rows.find((r) => !r.dominio.trim() || !(r.dniCuit.trim() || sharedDniCuit.trim()));
+    const invalidRow = rows.find((r) => !r.dominio.trim() || !r.dniCuit.trim());
     if (invalidRow) {
       setMessage({
         type: 'error',
@@ -235,10 +209,10 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       estacion: station,
       tag_serial: r.tagSerial.toUpperCase().trim(),
       dominio: r.dominio.toUpperCase().trim(),
-      dni_cuit: (r.dniCuit || sharedDniCuit).trim(),
+      dni_cuit: r.dniCuit.trim(),
       nombre_apellido: (r.nombre || sharedNombre).trim(),
-      email_contacto: (r.emailContacto || sharedEmail).trim(),
-      celular_contacto: (r.celularContacto || sharedCelular).trim(),
+      email_contacto: '',
+      celular_contacto: '',
       operador_runner: currentUser.nombre || currentUser.email,
       observaciones: observaciones.trim(),
     }));
@@ -261,7 +235,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     const detalleTxt =
       payloads.length === 1
         ? `Entrega de TAG ${payloads[0].tag_serial} a Vehículo Dominio ${payloads[0].dominio} (DNI/CUIT: ${payloads[0].dni_cuit}) en ${station}`
-        : `Entrega Masiva de ${payloads.length} TAGs a ${sharedNombre || 'la flota'} (DNI/CUIT: ${sharedDniCuit || 'N/A'}) en ${station}`;
+        : `Entrega Masiva de ${payloads.length} TAGs a ${sharedNombre || 'la flota'} en ${station}`;
 
     logUserAction(currentUser, accionTxt, 'Entregas', detalleTxt);
 
@@ -274,10 +248,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
     const nextSuggested = getFirstAvailableTagForStation(station);
     setStartSerial(nextSuggested || '');
     setQuantity(1); // MANTENER DEFAULT EN 1
-    setSharedDniCuit('');
     setSharedNombre('');
-    setSharedEmail('');
-    setSharedCelular('');
     setObservaciones('');
     setLoading(false);
 
@@ -295,7 +266,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       (r) =>
         validateTagDelivery(station, r.tagSerial).valid &&
         r.dominio.trim().length >= 3 &&
-        (r.dniCuit.trim().length >= 5 || sharedDniCuit.trim().length >= 5)
+        r.dniCuit.trim().length >= 5
     );
 
   return (
@@ -320,7 +291,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-5 space-y-5">
+      <form onSubmit={handleSubmit} className="p-5 space-y-4">
         {message && (
           <div
             className={`p-3.5 rounded-xl text-xs font-semibold flex items-center space-x-2 border animate-in fade-in duration-150 ${
@@ -339,19 +310,17 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
         )}
 
         {/* 1. CONFIGURACIÓN PRINCIPAL DE ENTREGA */}
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-4">
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-3">
           <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-            <div className="flex items-center space-x-2">
-              <span className="text-cs-primary font-bold text-xs uppercase tracking-wider">
-                1. DATOS DE ENTREGA Y STOCK
-              </span>
-            </div>
-            <span className="text-[10px] text-slate-400 font-medium">Generación de series y asignación</span>
+            <span className="text-cs-primary font-bold text-xs uppercase tracking-wider">
+              1. DATOS DE ENTREGA Y STOCK
+            </span>
+            <span className="text-[10px] text-slate-400 font-medium">Configuración inicial</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="flex flex-wrap items-start gap-3">
             {/* Punto de Entrega */}
-            <div>
+            <div className="w-full sm:w-48">
               <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                 Punto de Entrega *
               </label>
@@ -359,7 +328,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                 value={station}
                 onChange={(e) => setStation(e.target.value)}
                 disabled={currentUser.punto_entrega !== 'Todos' && !!currentUser.punto_entrega}
-                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none disabled:bg-slate-100"
+                className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none disabled:bg-slate-100"
               >
                 {deliveryPoints.map((pt) => (
                   <option key={pt} value={pt}>
@@ -369,11 +338,11 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
               </select>
             </div>
 
-            {/* Primer TAG Serial */}
-            <div>
+            {/* Primer TAG Serial (Ancho optimizado) */}
+            <div className="w-full sm:w-44">
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-[11px] font-bold text-cs-primary uppercase">
-                  Nº Serie TAG RFID *
+                  Nº Serie TAG *
                 </label>
                 <button
                   type="button"
@@ -382,10 +351,10 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                     if (first) setStartSerial(first);
                   }}
                   className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5"
-                  title="Sugerir el primer TAG disponible en stock para esta estación"
+                  title="Sugerir primer TAG disponible"
                 >
                   <Zap className="w-3 h-3 text-emerald-600" />
-                  <span>Primer Disponible</span>
+                  <span>Primer Disp.</span>
                 </button>
               </div>
               <input
@@ -393,7 +362,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                 value={startSerial}
                 onChange={(e) => setStartSerial(e.target.value.toUpperCase().trim())}
                 placeholder="ej. 63230000"
-                className={`w-full p-2.5 bg-white border rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none ${
+                className={`w-full p-2 bg-white border rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none ${
                   startSerial.trim()
                     ? startSerialValidation.valid
                       ? 'border-slate-300'
@@ -405,21 +374,21 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                 startSerialValidation.valid ? (
                   <div className="mt-1 text-[10px] text-emerald-800 font-bold flex items-center space-x-1">
                     <CheckCircle2 className="w-3 h-3 text-emerald-600 flex-shrink-0" />
-                    <span>TAG disponible en {station} ({quantity} TAG{quantity > 1 ? 's' : ''})</span>
+                    <span>Disponible en {station}</span>
                   </div>
                 ) : (
-                  <div className="mt-1 p-2 rounded-lg bg-rose-50 border border-rose-200 text-[10px] text-rose-800 font-bold flex items-start space-x-1.5 leading-snug">
-                    <AlertCircle className="w-3.5 h-3.5 text-rose-600 flex-shrink-0 mt-0.5" />
+                  <div className="mt-1 p-1.5 rounded-lg bg-rose-50 border border-rose-200 text-[10px] text-rose-800 font-bold flex items-start space-x-1 leading-tight">
+                    <AlertCircle className="w-3 h-3 text-rose-600 flex-shrink-0 mt-0.5" />
                     <span>{startSerialValidation.error}</span>
                   </div>
                 )
               )}
             </div>
 
-            {/* Cantidad de TAGs (Default: 1) */}
-            <div>
+            {/* Cantidad de TAGs (Ancho minimizado) */}
+            <div className="w-24">
               <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                Cantidad de TAGs *
+                Cantidad *
               </label>
               <input
                 type="number"
@@ -427,39 +396,12 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                 max={100}
                 value={quantity}
                 onChange={(e) => setQuantity(parseInt(e.target.value, 10) || 1)}
-                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 text-center focus:ring-2 focus:ring-cs-primary focus:outline-none"
               />
             </div>
 
-            {/* DNI / CUIT Principal */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-bold text-slate-700 uppercase">
-                  DNI / CUIT Receptor *
-                </label>
-                <button
-                  type="button"
-                  onClick={handleReplicateHeaderDni}
-                  className="text-[10px] text-cs-primary font-bold hover:underline flex items-center space-x-0.5"
-                  title="Replicar este DNI/CUIT en todas las filas de la lista"
-                >
-                  <Copy className="w-3 h-3" />
-                  <span>Replicar</span>
-                </button>
-              </div>
-              <input
-                type="text"
-                value={sharedDniCuit}
-                onChange={(e) => setSharedDniCuit(e.target.value.replace(/\D/g, ''))}
-                placeholder="Sin puntos ni guiones (ej. 30712345678)"
-                className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-            {/* Nombre / Razón Social */}
-            <div>
+            {/* Nombre / Razón Social (Opcional Header) */}
+            <div className="flex-1 min-w-[200px]">
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-[11px] font-bold text-slate-700 uppercase">
                   Nombre / Razón Social (Opcional)
@@ -468,6 +410,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                   type="button"
                   onClick={handleReplicateHeaderNombre}
                   className="text-[10px] text-cs-primary font-bold hover:underline flex items-center space-x-0.5"
+                  title="Replicar en la lista de vehículos"
                 >
                   <Copy className="w-3 h-3" />
                   <span>Replicar</span>
@@ -481,54 +424,6 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                 className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
               />
             </div>
-
-            {/* Email Contacto */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-bold text-slate-700 uppercase">
-                  Email Contacto (Opcional)
-                </label>
-                <button
-                  type="button"
-                  onClick={handleReplicateHeaderEmail}
-                  className="text-[10px] text-cs-primary font-bold hover:underline flex items-center space-x-0.5"
-                >
-                  <Mail className="w-3 h-3" />
-                  <span>Replicar</span>
-                </button>
-              </div>
-              <input
-                type="email"
-                value={sharedEmail}
-                onChange={(e) => setSharedEmail(e.target.value)}
-                placeholder="ej. contacto@empresa.com"
-                className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
-              />
-            </div>
-
-            {/* Celular / WhatsApp */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-[11px] font-bold text-slate-700 uppercase">
-                  Celular / WhatsApp (Opcional)
-                </label>
-                <button
-                  type="button"
-                  onClick={handleReplicateHeaderCelular}
-                  className="text-[10px] text-cs-primary font-bold hover:underline flex items-center space-x-0.5"
-                >
-                  <Phone className="w-3 h-3" />
-                  <span>Replicar</span>
-                </button>
-              </div>
-              <input
-                type="text"
-                value={sharedCelular}
-                onChange={(e) => setSharedCelular(e.target.value.replace(/\D/g, ''))}
-                placeholder="ej. 3764123456"
-                className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
-              />
-            </div>
           </div>
 
           <div>
@@ -539,7 +434,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
               type="text"
               value={observaciones}
               onChange={(e) => setObservaciones(e.target.value)}
-              placeholder="ej. Entrega efectuada en estación de peaje"
+              placeholder="ej. Entrega efectuada en cabina de vía"
               className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:ring-2 focus:ring-cs-primary focus:outline-none"
             />
           </div>
@@ -551,7 +446,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
             <div className="flex items-center space-x-2">
               <Hash className="w-4 h-4 text-cs-primary" />
               <span className="font-bold text-xs uppercase tracking-wider text-slate-800">
-                2. ASIGNACIÓN DE PATENTES / DOMINIOS POR VEHÍCULO
+                2. ASIGNACIÓN DE PATENTES / DOMINIOS Y TITULAR POR VEHÍCULO
               </span>
             </div>
 
@@ -566,11 +461,11 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
             <table className="w-full text-xs text-left text-slate-700">
               <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
                 <tr>
-                  <th className="p-2.5 text-center w-12">#</th>
-                  <th className="p-2.5">TAG Serial *</th>
-                  <th className="p-2.5 text-center">Estado Stock</th>
-                  <th className="p-2.5">Dominio / Patente *</th>
-                  <th className="p-2.5">DNI / CUIT *</th>
+                  <th className="p-2.5 text-center w-10">#</th>
+                  <th className="p-2.5 w-36">TAG Serial *</th>
+                  <th className="p-2.5 text-center w-24">Estado Stock</th>
+                  <th className="p-2.5 w-36">Dominio / Patente *</th>
+                  <th className="p-2.5 w-40">DNI / CUIT *</th>
                   <th className="p-2.5">Nombre / Razón Social</th>
                 </tr>
               </thead>
@@ -625,7 +520,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                           onChange={(e) => handleRowChange(row.id, 'dniCuit', e.target.value.replace(/\D/g, ''))}
                           placeholder="ej. 30712345678"
                           className={`w-full p-1.5 rounded-lg font-mono text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none border ${
-                            !row.dniCuit.trim() && !sharedDniCuit.trim()
+                            !row.dniCuit.trim()
                               ? 'bg-rose-50/60 border-rose-300 text-rose-800 placeholder:text-rose-400'
                               : 'bg-white border-slate-300 text-slate-900 font-bold'
                           }`}
