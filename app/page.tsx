@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import { TagDelivery, PeajeStock, UserSession, TagBatch, TagTransfer } from '@/types/database';
@@ -660,6 +660,83 @@ export default function AntigravityDashboard() {
         {/* VISTA 4: PANEL PRINCIPAL DE ENTREGAS Y STOCK */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
+            {/* Header de Indicadores de Stock con Selector de Período Temporal */}
+            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-center space-x-2">
+                <BarChart3 className="w-5 h-5 text-cs-primary" />
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">Estado de Inventario por Punto de Entrega</h3>
+                  <p className="text-[11px] text-slate-500">
+                    Métricas de stock disponible y entregas según el período seleccionado
+                  </p>
+                </div>
+              </div>
+
+              {/* Selector de Período Temporal */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="bg-slate-100 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-200">
+                  <button
+                    onClick={() => setDateFilterMode('todos')}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      dateFilterMode === 'todos' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    onClick={() => setDateFilterMode('hoy')}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      dateFilterMode === 'hoy' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Hoy
+                  </button>
+                  <button
+                    onClick={() => setDateFilterMode('semana')}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      dateFilterMode === 'semana' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Semana
+                  </button>
+                  <button
+                    onClick={() => setDateFilterMode('mes')}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      dateFilterMode === 'mes' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Mes
+                  </button>
+                  <button
+                    onClick={() => setDateFilterMode('rango')}
+                    className={`px-3 py-1.5 rounded-lg transition ${
+                      dateFilterMode === 'rango' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Rango de Fechas
+                  </button>
+                </div>
+
+                {dateFilterMode === 'rango' && (
+                  <div className="flex items-center space-x-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200 text-xs">
+                    <input
+                      type="date"
+                      value={customFechaDesde}
+                      onChange={(e) => setCustomFechaDesde(e.target.value)}
+                      className="p-1.5 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                    />
+                    <span className="text-slate-400 font-bold">a</span>
+                    <input
+                      type="date"
+                      value={customFechaHasta}
+                      onChange={(e) => setCustomFechaHasta(e.target.value)}
+                      className="p-1.5 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Tarjetas de Stock por Punto de Entrega */}
             {stocks.length === 0 ? (
               <div className="p-4 bg-white rounded-2xl border border-slate-200/80 text-center text-slate-500 font-medium text-xs flex items-center justify-center space-x-2">
@@ -672,6 +749,13 @@ export default function AntigravityDashboard() {
                   const disponible = s.stock_recibido - s.stock_entregado;
                   const bajoStock = disponible <= s.stock_minimo_alerta;
                   const isMyPoint = userSession.punto_entrega === s.estacion;
+                  const entregadosPeriodo = (deliveries || []).filter(
+                    (d) =>
+                      d &&
+                      d.estacion &&
+                      d.estacion.trim().toLowerCase() === s.estacion.trim().toLowerCase() &&
+                      isDateInFilter(d.created_at, dateFilterMode, customFechaDesde, customFechaHasta)
+                  ).length;
 
                   return (
                     <div
@@ -704,7 +788,7 @@ export default function AntigravityDashboard() {
                         {disponible.toLocaleString('es-AR')} <span className="text-xs font-normal text-slate-500">disp.</span>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-1.5 flex items-center justify-between gap-1">
-                        <span>Entregados: <b className="text-slate-800">{s.stock_entregado.toLocaleString('es-AR')}</b></span>
+                        <span>Entregados: <b className="text-slate-800">{entregadosPeriodo.toLocaleString('es-AR')}</b></span>
                         <span>Recibidos: <b className="text-slate-700">{s.stock_recibido.toLocaleString('es-AR')}</b></span>
                       </div>
 
@@ -731,99 +815,7 @@ export default function AntigravityDashboard() {
               </div>
             )}
 
-            {/* 1. Indicadores de Entregas por Peajes con Selección Temporal */}
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-                <div className="flex items-center space-x-2">
-                  <BarChart3 className="w-5 h-5 text-cs-primary" />
-                  <div>
-                    <h3 className="font-bold text-base text-slate-900">Indicadores de Entregas por Peajes</h3>
-                    <p className="text-xs text-slate-500">Métricas de TAGs entregados en vía según el período seleccionado</p>
-                  </div>
-                </div>
-
-                {/* Selector de Período Temporal */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="bg-slate-100 p-1 rounded-xl flex items-center text-xs font-bold border border-slate-200">
-                    <button
-                      onClick={() => setDateFilterMode('hoy')}
-                      className={`px-3 py-1.5 rounded-lg transition ${
-                        dateFilterMode === 'hoy' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Hoy
-                    </button>
-                    <button
-                      onClick={() => setDateFilterMode('semana')}
-                      className={`px-3 py-1.5 rounded-lg transition ${
-                        dateFilterMode === 'semana' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Semana
-                    </button>
-                    <button
-                      onClick={() => setDateFilterMode('mes')}
-                      className={`px-3 py-1.5 rounded-lg transition ${
-                        dateFilterMode === 'mes' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Mes
-                    </button>
-                    <button
-                      onClick={() => setDateFilterMode('rango')}
-                      className={`px-3 py-1.5 rounded-lg transition ${
-                        dateFilterMode === 'rango' ? 'bg-cs-primary text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Rango de Fechas
-                    </button>
-                  </div>
-
-                  {dateFilterMode === 'rango' && (
-                    <div className="flex items-center space-x-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200 text-xs">
-                      <input
-                        type="date"
-                        value={customFechaDesde}
-                        onChange={(e) => setCustomFechaDesde(e.target.value)}
-                        className="p-1.5 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                      />
-                      <span className="text-slate-400 font-bold">a</span>
-                      <input
-                        type="date"
-                        value={customFechaHasta}
-                        onChange={(e) => setCustomFechaHasta(e.target.value)}
-                        className="p-1.5 rounded-lg border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-cs-primary focus:outline-none"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Tarjetas Resumen del Período */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl text-center">
-                  <span className="text-[10px] font-bold text-emerald-800 uppercase block">Total Período</span>
-                  <span className="text-xl font-black text-emerald-950 font-mono">
-                    {totalPeriodDeliveries.toLocaleString('es-AR')}
-                  </span>
-                  <span className="text-[10px] text-emerald-700 block font-medium">TAGs Entregados</span>
-                </div>
-
-                {deliveriesByStation.map((item) => (
-                  <div key={`stat_${item.estacion}`} className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-center">
-                    <span className="text-[10px] font-bold text-cs-primary uppercase block truncate" title={item.estacion}>
-                      {item.estacion}
-                    </span>
-                    <span className="text-xl font-black text-slate-900 font-mono">
-                      {item.count.toLocaleString('es-AR')}
-                    </span>
-                    <span className="text-[10px] text-slate-500 block font-medium">Entregas</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 2. Formulario / Grilla Detalle de Entregas */}
+            {/* Formulario / Grilla Detalle de Entregas */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Formulario con usuario autenticado (Oculto para Rol Consulta) */}
               {userSession.rol !== 'Consulta' && (
@@ -842,15 +834,6 @@ export default function AntigravityDashboard() {
 
                   {/* Botones de Exportación */}
                   <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => setIsReportModalOpen(true)}
-                      className="px-3 py-2 bg-sky-700 hover:bg-sky-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-sm transition"
-                      title="Configurar y ejecutar envío programado de reportes de inventario por Punto de Entrega"
-                    >
-                      <Mail className="w-4 h-4 text-sky-200" />
-                      <span>Envío Mails</span>
-                    </button>
-
                     <button
                       onClick={exportToExcel}
                       className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-sm transition"
