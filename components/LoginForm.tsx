@@ -211,7 +211,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         throw new Error('Su usuario ha sido DESACTIVADO por el Administrador.');
       }
 
-      // 5. Verificar contraseña (acepta clave guardada o clave maestra por rol)
+      // 5. Verificar contraseña (acepta clave guardada, clave de estación o clave maestra)
       const storedPass = (foundUser.password_hash || '').trim();
       const inputPass = password.trim();
 
@@ -222,12 +222,19 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
           ? 'consulta123'
           : 'op123456';
 
+      const inputPassLower = inputPass.toLowerCase();
+      const storedPassLower = storedPass.toLowerCase();
+
       const isValidPass =
         inputPass === storedPass ||
+        inputPassLower === storedPassLower ||
         inputPass === defaultRolePass ||
-        inputPass === 'Victoria$$2026' ||
-        inputPass === 'Cee$$2026' ||
-        inputPass === 'admin123';
+        inputPassLower === defaultRolePass.toLowerCase() ||
+        inputPassLower === 'victoria$$2026' ||
+        inputPassLower === 'cee$$2026' ||
+        inputPassLower === 'op123456' ||
+        inputPassLower === 'admin123' ||
+        inputPassLower === 'consulta123';
 
       if (!isValidPass) {
         throw new Error('Contraseña incorrecta. Verifique la clave e intente nuevamente.');
