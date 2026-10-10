@@ -1106,7 +1106,7 @@ export default function AntigravityDashboard() {
             )}
 
             {/* LISTADO COMPLETO DE ENTREGAS (ORDEN 3) */}
-            <div className="w-full order-3 bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
+            <div className="w-full max-w-full overflow-hidden order-3 bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center space-x-2">
                     <Layers className="w-5 h-5 text-cs-primary" />
@@ -1114,7 +1114,7 @@ export default function AntigravityDashboard() {
                   </div>
 
                   {/* Botones de Exportación */}
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={exportToExcel}
                       className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-sm transition"
@@ -1174,8 +1174,8 @@ export default function AntigravityDashboard() {
                 </div>
 
                 {/* Tabla con la Información Registrada */}
-                <div className="overflow-x-auto max-h-[520px] overflow-y-auto border border-slate-200 rounded-xl">
-                  <table className="w-full text-left border-collapse text-xs">
+                <div className="w-full max-w-full overflow-x-auto max-h-[520px] overflow-y-auto border border-slate-200 rounded-xl">
+                  <table className="w-full min-w-[750px] text-left border-collapse text-xs">
                     <thead className="bg-cs-dark text-white sticky top-0 z-10">
                       <tr>
                         <th className="p-3">Fecha/Hora</th>

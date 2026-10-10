@@ -29,7 +29,8 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
   // Configuración Unificada de Entrega (Default: 1 TAG)
   const [station, setStation] = useState<string>(defaultStation);
   const [startSerial, setStartSerial] = useState<string>('');
-  const [quantity, setQuantity] = useState<number>(1); // DEFAULT ES 1 TAG
+  const [quantityStr, setQuantityStr] = useState<string>('1');
+  const quantity = Math.max(1, Math.min(parseInt(quantityStr, 10) || 1, 100));
   const [rows, setRows] = useState<DeliveryRow[]>([]);
 
   const [deliveryPoints, setDeliveryPoints] = useState<string[]>([
@@ -274,7 +275,7 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
     // Resetear formulario con el siguiente TAG disponible y limpiar todos los campos
     setRows([]);
-    setQuantity(1); // MANTENER DEFAULT EN 1
+    setQuantityStr('1'); // MANTENER DEFAULT EN 1
     const nextSuggested = getFirstAvailableTagForStation(station);
     setStartSerial(nextSuggested || '');
     setLoading(false);
@@ -299,29 +300,24 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       {/* Encabezado del Formulario */}
-      <div className="bg-cs-primary text-white p-4 px-6 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="p-2 bg-white/10 rounded-xl">
-            <Car className="w-5 h-5 text-emerald-300" />
+      <div className="bg-cs-primary text-white py-2.5 px-4 flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <div className="p-1.5 bg-white/10 rounded-lg">
+            <Car className="w-4 h-4 text-emerald-300" />
           </div>
-          <div>
-            <h2 className="text-base font-bold">Registro de Entrega en Vía</h2>
-            <p className="text-xs text-emerald-100">
-              Entrega directa de TAGs TelePASE por vehículo o flota en estación
-            </p>
-          </div>
+          <h2 className="text-sm font-extrabold tracking-tight">Registro de Entrega</h2>
         </div>
 
-        <div className="flex items-center space-x-2 bg-white/10 px-3 py-1.5 rounded-xl border border-white/20 text-xs">
+        <div className="flex items-center space-x-1.5 bg-white/10 px-2.5 py-1 rounded-lg border border-white/20 text-xs">
           <User className="w-3.5 h-3.5 text-emerald-300" />
           <span className="font-bold">{currentUser.nombre || currentUser.email}</span>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-5 space-y-4">
+      <form onSubmit={handleSubmit} className="p-4 space-y-4">
         {message && (
           <div
-            className={`p-3.5 rounded-xl text-xs font-semibold flex items-center space-x-2 border animate-in fade-in duration-150 ${
+            className={`p-3 rounded-xl text-xs font-semibold flex items-center space-x-2 border animate-in fade-in duration-150 ${
               message.type === 'success'
                 ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
                 : 'bg-rose-50 text-rose-900 border-rose-300'
@@ -413,18 +409,67 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
             </div>
 
             {/* Cantidad de TAGs */}
-            <div className="w-24">
+            <div className="w-full sm:w-auto">
               <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
                 Cantidad *
               </label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value, 10) || 1)}
-                className="w-full p-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 text-center focus:ring-2 focus:ring-cs-primary focus:outline-none"
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center border border-slate-300 rounded-xl overflow-hidden bg-white shadow-2xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = parseInt(quantityStr, 10) || 1;
+                      const val = Math.max(1, current - 1);
+                      setQuantityStr(String(val));
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-sm transition select-none"
+                    title="Disminuir cantidad"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={quantityStr}
+                    onChange={(e) => setQuantityStr(e.target.value)}
+                    onBlur={() => {
+                      if (!quantityStr || parseInt(quantityStr, 10) < 1) setQuantityStr('1');
+                    }}
+                    className="w-14 p-1.5 text-center bg-white text-xs font-bold text-slate-900 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const current = parseInt(quantityStr, 10) || 1;
+                      const val = Math.min(100, current + 1);
+                      setQuantityStr(String(val));
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-sm transition select-none"
+                    title="Aumentar cantidad"
+                  >
+                    +
+                  </button>
+                </div>
+
+                {/* Botones de Selección Rápida */}
+                <div className="flex items-center gap-1">
+                  {[1, 2, 5, 10].map((num) => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setQuantityStr(String(num))}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-extrabold transition border select-none ${
+                        (parseInt(quantityStr, 10) || 1) === num
+                          ? 'bg-cs-primary text-white border-cs-primary shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
