@@ -15,6 +15,7 @@ import { getMasterDeliveryPoints, getMasterDeliveryPointsSync, fixUserName, DEFA
 import ActivationDocManagement, { getActivationDocConfig, generateWhatsAppLink } from '@/components/ActivationDocManagement';
 import { Download, Search, RefreshCw, Layers, ShieldCheck, AlertTriangle, LogOut, User, FileSpreadsheet, LayoutDashboard, PlusCircle, Users, MapPin, Edit2, Trash2, X, Save, Truck, Mail, Phone, BarChart3, Calendar, Send, FileText } from 'lucide-react';
 import ConfirmModal from '@/components/ConfirmModal';
+import TagSeriesDetailModal from '@/components/TagSeriesDetailModal';
 
 export default function AntigravityDashboard() {
   const [userSession, setUserSession] = useState<UserSession | null>(null);
@@ -26,6 +27,8 @@ export default function AntigravityDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transfers' | 'settings_batches' | 'settings_points' | 'settings_users' | 'settings_docs'>('dashboard');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
+  const [selectedSeriesStation, setSelectedSeriesStation] = useState<string>('Todas');
 
   const docConfig = useMemo(() => getActivationDocConfig(), [activeTab]);
 
@@ -786,14 +789,28 @@ export default function AntigravityDashboard() {
           <div className="space-y-6">
             {/* Header de Indicadores de Stock con Selector de Período Temporal */}
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex items-center space-x-2">
-                <BarChart3 className="w-5 h-5 text-cs-primary" />
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900">Estado de Inventario por Punto de Entrega</h3>
-                  <p className="text-[11px] text-slate-500">
-                    Métricas de stock disponible y entregas según el período seleccionado
-                  </p>
+              <div className="flex items-center justify-between w-full md:w-auto gap-3">
+                <div className="flex items-center space-x-2">
+                  <BarChart3 className="w-5 h-5 text-cs-primary" />
+                  <div>
+                    <h3 className="font-bold text-sm text-slate-900">Estado de Inventario por Punto de Entrega</h3>
+                    <p className="text-[11px] text-slate-500">
+                      Métricas de stock disponible y entregas según el período seleccionado
+                    </p>
+                  </div>
                 </div>
+
+                <button
+                  onClick={() => {
+                    setSelectedSeriesStation('Todas');
+                    setIsSeriesModalOpen(true);
+                  }}
+                  className="px-3 py-1.5 bg-cs-primary hover:bg-emerald-950 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-xs flex-shrink-0"
+                  title="Ver el detalle completo de series y rangos de TAGs por Punto de Entrega"
+                >
+                  <Layers className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>Ver Series de TAGs</span>
+                </button>
               </div>
 
               {/* Selector de Período Temporal */}
@@ -933,6 +950,19 @@ export default function AntigravityDashboard() {
                           {(s.pendientes_recepcion || 0).toLocaleString('es-AR')}
                         </b>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSeriesStation(s.estacion);
+                          setIsSeriesModalOpen(true);
+                        }}
+                        className="mt-1.5 w-full flex items-center justify-center space-x-1 px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-cs-primary border border-emerald-200/80 rounded-lg text-[10px] font-extrabold transition"
+                        title={`Ver detalle de series de TAGs asignados a ${s.estacion}`}
+                      >
+                        <Layers className="w-3 h-3 text-emerald-600" />
+                        <span>Ver Series ({disponible.toLocaleString('es-AR')} disp.)</span>
+                      </button>
                     </div>
                   );
                 })}
@@ -1291,6 +1321,13 @@ export default function AntigravityDashboard() {
           setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
         }}
         onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      <TagSeriesDetailModal
+        isOpen={isSeriesModalOpen}
+        onClose={() => setIsSeriesModalOpen(false)}
+        initialStation={selectedSeriesStation}
+        availableStations={availableStations}
       />
 
       {/* Invisible Sync Bridge IFrames to auto-restore data from previous Vercel deployment domains */}
