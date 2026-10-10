@@ -12,12 +12,11 @@ const DEFAULT_STATIONS: PeajeStock[] = [
 ];
 
 /**
- * Obtiene el Maestro Oficial de Puntos de Entrega (Respuesta Inmediata)
+ * Obtiene el Maestro Oficial de Puntos de Entrega Sincrónico (0ms desde LocalStorage)
  */
-export async function getMasterDeliveryPoints(): Promise<PeajeStock[]> {
+export function getMasterDeliveryPointsSync(): PeajeStock[] {
   let localPoints: PeajeStock[] = [];
 
-  // 1. Leer inmediatamente desde LocalStorage (sin retardo de red)
   if (typeof window !== 'undefined') {
     const keysToTry = [
       STORAGE_KEY,
@@ -39,10 +38,18 @@ export async function getMasterDeliveryPoints(): Promise<PeajeStock[]> {
     }
   }
 
-  // Si no hay puntos locales previos, cargar estaciones base oficiales
   if (localPoints.length === 0) {
     localPoints = DEFAULT_STATIONS;
   }
+
+  return localPoints;
+}
+
+/**
+ * Obtiene el Maestro Oficial de Puntos de Entrega (Respuesta Inmediata y Sincronización Remota)
+ */
+export async function getMasterDeliveryPoints(): Promise<PeajeStock[]> {
+  let localPoints = getMasterDeliveryPointsSync();
 
   // 2. Intentar obtener desde Supabase con timeout de 1.5s para no demorar la carga
   try {
