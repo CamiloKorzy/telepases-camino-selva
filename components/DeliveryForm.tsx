@@ -176,13 +176,50 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
   };
 
   const replicateDniCuit = () => {
-    if (!sharedDniCuit) return;
-    setBulkRows((prev) => prev.map((r) => ({ ...r, dniCuit: sharedDniCuit.trim() })));
+    const targetDni = sharedDniCuit.trim() || (bulkRows[0]?.dniCuit.trim() || '');
+    if (!targetDni) return;
+    setSharedDniCuit(targetDni);
+    setBulkRows((prev) => prev.map((r) => ({ ...r, dniCuit: targetDni })));
   };
 
   const replicateNombre = () => {
-    if (!sharedNombre) return;
-    setBulkRows((prev) => prev.map((r) => ({ ...r, nombre: sharedNombre.trim() })));
+    const targetNombre = sharedNombre.trim() || (bulkRows[0]?.nombre.trim() || '');
+    if (!targetNombre) return;
+    setSharedNombre(targetNombre);
+    setBulkRows((prev) => prev.map((r) => ({ ...r, nombre: targetNombre })));
+  };
+
+  const replicateDniCuitAndNombre = () => {
+    const targetDni = sharedDniCuit.trim() || (bulkRows[0]?.dniCuit.trim() || '');
+    const targetNombre = sharedNombre.trim() || (bulkRows[0]?.nombre.trim() || '');
+
+    if (targetDni) setSharedDniCuit(targetDni);
+    if (targetNombre) setSharedNombre(targetNombre);
+
+    setBulkRows((prev) =>
+      prev.map((r) => ({
+        ...r,
+        dniCuit: targetDni || r.dniCuit,
+        nombre: targetNombre || r.nombre,
+      }))
+    );
+  };
+
+  const replicateFromFirstRow = () => {
+    if (bulkRows.length === 0) return;
+    const firstDni = bulkRows[0].dniCuit.trim() || sharedDniCuit.trim();
+    const firstNombre = bulkRows[0].nombre.trim() || sharedNombre.trim();
+
+    if (firstDni) setSharedDniCuit(firstDni);
+    if (firstNombre) setSharedNombre(firstNombre);
+
+    setBulkRows((prev) =>
+      prev.map((r) => ({
+        ...r,
+        dniCuit: firstDni || r.dniCuit,
+        nombre: firstNombre || r.nombre,
+      }))
+    );
   };
 
   // Validaciones en tiempo real para modo individual y masivo
@@ -742,12 +779,24 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
 
             {/* 2. Grilla de Carga de Patentes / Dominios */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center space-x-1">
                   <Hash className="w-4 h-4 text-cs-primary" />
                   <span>2. Asignación de Patentes / Dominios por Vehículo</span>
                 </span>
                 <div className="flex items-center space-x-2">
+                  {bulkRows.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={replicateFromFirstRow}
+                      className="text-[11px] font-bold text-emerald-900 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1 rounded-lg transition flex items-center space-x-1 shadow-xs"
+                      title="Copiar CUIT/DNI y Razón Social de la primera fila (o configuración) a todos los vehículos de abajo"
+                    >
+                      <Copy className="w-3.5 h-3.5 text-emerald-700" />
+                      <span>Replicar CUIT + Razón Social (a todos)</span>
+                    </button>
+                  )}
+
                   {bulkInvalidRowsCount > 0 && (
                     <button
                       type="button"
@@ -778,8 +827,34 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
                         <th className="p-2.5">TAG Serial *</th>
                         <th className="p-2.5">Estado Stock</th>
                         <th className="p-2.5">Dominio / Patente *</th>
-                        <th className="p-2.5">DNI / CUIT *</th>
-                        <th className="p-2.5">Razón Social / Receptor</th>
+                        <th className="p-2.5">
+                          <div className="flex items-center justify-between">
+                            <span>DNI / CUIT *</span>
+                            <button
+                              type="button"
+                              onClick={replicateDniCuit}
+                              className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5 ml-1"
+                              title="Replicar DNI/CUIT de la fila 1 a las demás filas"
+                            >
+                              <Copy className="w-3 h-3" />
+                              <span>Replicar</span>
+                            </button>
+                          </div>
+                        </th>
+                        <th className="p-2.5">
+                          <div className="flex items-center justify-between">
+                            <span>Razón Social / Receptor</span>
+                            <button
+                              type="button"
+                              onClick={replicateNombre}
+                              className="text-[10px] text-emerald-700 font-extrabold hover:underline flex items-center space-x-0.5 ml-1"
+                              title="Replicar Razón Social de la fila 1 a las demás filas"
+                            >
+                              <Copy className="w-3 h-3" />
+                              <span>Replicar</span>
+                            </button>
+                          </div>
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 bg-white">
