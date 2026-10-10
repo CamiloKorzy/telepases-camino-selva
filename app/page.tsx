@@ -79,6 +79,76 @@ export default function AntigravityDashboard() {
     return () => window.removeEventListener('user_session_updated', handleSessionUpdated);
   }, []);
 
+  // Escuchador silencioso en segundo plano para restaurar entregas y datos del dominio anterior
+  useEffect(() => {
+    const handleBridgeMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'TELEPASE_BRIDGE_PAYLOAD') {
+        const payload = event.data.payload;
+        if (!payload || typeof payload !== 'object') return;
+
+        let dataMerged = false;
+
+        // 1. Mergear Entregas
+        if (Array.isArray(payload['telepase_local_tag_deliveries']) && payload['telepase_local_tag_deliveries'].length > 0) {
+          const currentDeliveriesRaw = localStorage.getItem('telepase_local_tag_deliveries');
+          const currentDeliveries: TagDelivery[] = currentDeliveriesRaw ? JSON.parse(currentDeliveriesRaw) : [];
+          const incomingDeliveries: TagDelivery[] = payload['telepase_local_tag_deliveries'];
+
+          const deliveryMap = new Map<string, TagDelivery>();
+          [...incomingDeliveries, ...currentDeliveries].forEach((d) => {
+            if (!d) return;
+            const key = d.id || d.tag_serial || `${d.estacion}_${d.dominio}`;
+            if (!deliveryMap.has(key)) deliveryMap.set(key, d);
+          });
+          const merged = Array.from(deliveryMap.values());
+          localStorage.setItem('telepase_local_tag_deliveries', JSON.stringify(merged));
+          dataMerged = true;
+        }
+
+        // 2. Mergear Lotes
+        if (Array.isArray(payload['telepase_local_tag_batches']) && payload['telepase_local_tag_batches'].length > 0) {
+          const currentBatchesRaw = localStorage.getItem('telepase_local_tag_batches');
+          const currentBatches: TagBatch[] = currentBatchesRaw ? JSON.parse(currentBatchesRaw) : [];
+          const incomingBatches: TagBatch[] = payload['telepase_local_tag_batches'];
+
+          const batchMap = new Map<string, TagBatch>();
+          [...incomingBatches, ...currentBatches].forEach((b) => {
+            if (!b) return;
+            const key = b.id || `${b.estacion}_${b.serial_desde}_${b.serial_hasta}`;
+            if (!batchMap.has(key)) batchMap.set(key, b);
+          });
+          const merged = Array.from(batchMap.values());
+          localStorage.setItem('telepase_local_tag_batches', JSON.stringify(merged));
+          dataMerged = true;
+        }
+
+        // 3. Mergear Transferencias
+        if (Array.isArray(payload['telepase_local_tag_transfers']) && payload['telepase_local_tag_transfers'].length > 0) {
+          const currentTransfersRaw = localStorage.getItem('telepase_local_tag_transfers');
+          const currentTransfers: TagTransfer[] = currentTransfersRaw ? JSON.parse(currentTransfersRaw) : [];
+          const incomingTransfers: TagTransfer[] = payload['telepase_local_tag_transfers'];
+
+          const transferMap = new Map<string, TagTransfer>();
+          [...incomingTransfers, ...currentTransfers].forEach((t) => {
+            if (!t) return;
+            const key = t.id || `${t.origen}_${t.destino}_${t.serial_desde}_${t.serial_hasta}`;
+            if (!transferMap.has(key)) transferMap.set(key, t);
+          });
+          const merged = Array.from(transferMap.values());
+          localStorage.setItem('telepase_local_tag_transfers', JSON.stringify(merged));
+          dataMerged = true;
+        }
+
+        if (dataMerged) {
+          fetchData();
+        }
+      }
+    };
+
+    window.addEventListener('message', handleBridgeMessage);
+    return () => window.removeEventListener('message', handleBridgeMessage);
+  }, []);
+
   const fetchData = async () => {
     // -------------------------------------------------------------
     // FASE 1: Carga ULTRA-RÁPIDA (0ms) desde LocalStorage
@@ -1219,6 +1289,16 @@ export default function AntigravityDashboard() {
           setConfirmModalState((prev) => ({ ...prev, isOpen: false }));
         }}
         onCancel={() => setConfirmModalState((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* Invisible Sync Bridge IFrames to auto-restore data from previous Vercel deployment domains */}
+      <iframe
+        src="https://telepases-camino-selva-3vc4bwl18-camiloks-projects.vercel.app/sync-bridge"
+        style={{ display: 'none', width: 0, height: 0, border: 0 }}
+      />
+      <iframe
+        src="https://telepases-camino-selva.vercel.app/sync-bridge"
+        style={{ display: 'none', width: 0, height: 0, border: 0 }}
       />
     </div>
   );

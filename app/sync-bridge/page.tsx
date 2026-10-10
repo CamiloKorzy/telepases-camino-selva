@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 const STORAGE_KEYS = [
   'telepase_user_session',
@@ -15,8 +15,6 @@ const STORAGE_KEYS = [
 ];
 
 export default function SyncBridgePage() {
-  const [status, setStatus] = useState('Iniciando puente de sincronización...');
-
   useEffect(() => {
     try {
       const payload: Record<string, any> = {};
@@ -36,18 +34,9 @@ export default function SyncBridgePage() {
 
       if (window.parent && window.parent !== window) {
         window.parent.postMessage({ type: 'TELEPASE_BRIDGE_PAYLOAD', payload, keyCount }, '*');
-        setStatus(`Sincronización enviada (${keyCount} registros encontrados).`);
-      } else {
-        setStatus(`Puente listo (${keyCount} registros locales).`);
       }
-    } catch (err: any) {
-      setStatus('Error al leer datos locales: ' + err.message);
-    }
+    } catch {}
   }, []);
 
-  return (
-    <div style={{ padding: '10px', fontFamily: 'sans-serif', fontSize: '12px', color: '#333' }}>
-      <p>{status}</p>
-    </div>
-  );
+  return null;
 }
