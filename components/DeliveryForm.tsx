@@ -244,12 +244,13 @@ export default function DeliveryForm({ currentUser, onDeliverySuccess }: Deliver
       text: `¡Entrega de ${payloads.length} TAG${payloads.length > 1 ? 's' : ''} registrada exitosamente en ${station}!`,
     });
 
-    // Resetear formulario con el siguiente TAG disponible
-    const nextSuggested = getFirstAvailableTagForStation(station);
-    setStartSerial(nextSuggested || '');
-    setQuantity(1); // MANTENER DEFAULT EN 1
+    // Resetear formulario con el siguiente TAG disponible y limpiar todos los campos
+    setRows([]);
     setSharedNombre('');
     setObservaciones('');
+    setQuantity(1); // MANTENER DEFAULT EN 1
+    const nextSuggested = getFirstAvailableTagForStation(station);
+    setStartSerial(nextSuggested || '');
     setLoading(false);
 
     onDeliverySuccess();
