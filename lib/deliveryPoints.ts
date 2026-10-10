@@ -52,14 +52,26 @@ export async function getMasterDeliveryPoints(): Promise<PeajeStock[]> {
     const res = await Promise.race([fetchPromise, timeoutPromise]);
     if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
       const remoteMap = new Map<string, PeajeStock>();
-      localPoints.forEach((p) => remoteMap.set(p.estacion.toLowerCase(), p));
+      localPoints.forEach((p) => {
+        if (p && p.estacion) remoteMap.set(p.estacion.toLowerCase(), p);
+      });
       res.data.forEach((p: PeajeStock) => {
-        if (!remoteMap.has(p.estacion.toLowerCase())) {
-          remoteMap.set(p.estacion.toLowerCase(), {
-            ...p,
-            stock_recibido: 0,
-            stock_entregado: 0,
-          });
+        if (p && p.estacion) {
+          const key = p.estacion.toLowerCase();
+          const existing = remoteMap.get(key);
+          if (!existing) {
+            remoteMap.set(key, {
+              ...p,
+              stock_recibido: 0,
+              stock_entregado: 0,
+            });
+          } else {
+            remoteMap.set(key, {
+              ...existing,
+              email_notificacion: p.email_notificacion || existing.email_notificacion,
+              stock_minimo_alerta: p.stock_minimo_alerta || existing.stock_minimo_alerta,
+            });
+          }
         }
       });
       localPoints = Array.from(remoteMap.values());

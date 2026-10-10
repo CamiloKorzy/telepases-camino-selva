@@ -70,158 +70,174 @@ export default function AntigravityDashboard() {
 
   const fetchData = async () => {
     setLoading(true);
-    let remoteDeliveries: TagDelivery[] = [];
-    let localDeliveries: TagDelivery[] = [];
-    let localBatches: TagBatch[] = [];
-
-    // 1. Obtener entregas guardadas en localStorage inmediatamente
-    const storedLocalDeliveries = localStorage.getItem('telepase_local_tag_deliveries');
-    if (storedLocalDeliveries) {
-      try {
-        localDeliveries = JSON.parse(storedLocalDeliveries);
-      } catch {}
-    }
-
-    // Consultar Supabase en segundo plano con timeout rápido (1.5s)
     try {
-      const fetchDeliveries = supabase.from('tag_deliveries').select('*').order('created_at', { ascending: false }).limit(300);
-      const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
-      const res = await Promise.race([fetchDeliveries, timeoutPromise]);
-      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
-        remoteDeliveries = res.data;
+      let remoteDeliveries: TagDelivery[] = [];
+      let localDeliveries: TagDelivery[] = [];
+      let localBatches: TagBatch[] = [];
+
+      // 1. Obtener entregas guardadas en localStorage inmediatamente
+      const storedLocalDeliveries = localStorage.getItem('telepase_local_tag_deliveries');
+      if (storedLocalDeliveries) {
+        try {
+          localDeliveries = JSON.parse(storedLocalDeliveries);
+        } catch {}
       }
-    } catch {}
 
-    // Combinar entregas remotas y locales sin duplicados
-    const deliveryMap = new Map<string, TagDelivery>();
-    [...localDeliveries, ...remoteDeliveries].forEach((d) => {
-      const key = d.id || d.tag_serial;
-      if (!deliveryMap.has(key)) {
-        deliveryMap.set(key, d);
-      }
-    });
-
-    const allDeliveries = Array.from(deliveryMap.values()).sort(
-      (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-    );
-    setDeliveries(allDeliveries);
-
-    // 2. Obtener Maestro Oficial de Puntos de Entrega (Respuesta Inmediata)
-    const masterPoints = await getMasterDeliveryPoints();
-    const stationNamesList = masterPoints.map((p) => p.estacion);
-    setAvailableStations(stationNamesList);
-
-    // 3. Obtener Lotes/Recepciones de localStorage y Supabase con timeout
-    const storedBatches = localStorage.getItem('telepase_local_tag_batches');
-    if (storedBatches) {
+      // Consultar Supabase en segundo plano con timeout rápido (1.5s)
       try {
-        localBatches = JSON.parse(storedBatches);
-        // Auto-corregir cantidad de lote de 501 -> 500
-        let updated = false;
-        localBatches = localBatches.map((b) => {
-          if (b.serial_desde === '63226500' && b.serial_hasta === '63227000' && b.cantidad === 501) {
-            updated = true;
-            return { ...b, cantidad: 500 };
-          }
-          return b;
-        });
-        if (updated) {
-          localStorage.setItem('telepase_local_tag_batches', JSON.stringify(localBatches));
+        const fetchDeliveries = supabase.from('tag_deliveries').select('*').order('created_at', { ascending: false }).limit(300);
+        const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+        const res = await Promise.race([fetchDeliveries, timeoutPromise]);
+        if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+          remoteDeliveries = res.data;
         }
       } catch {}
-    }
 
-    let remoteBatches: TagBatch[] = [];
-    try {
-      const fetchBatches = supabase.from('tag_batches').select('*');
-      const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
-      const res = await Promise.race([fetchBatches, timeoutPromise]);
-      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
-        remoteBatches = res.data;
+      // Combinar entregas remotas y locales sin duplicados
+      const deliveryMap = new Map<string, TagDelivery>();
+      [...localDeliveries, ...remoteDeliveries].forEach((d) => {
+        if (!d) return;
+        const key = d.id || d.tag_serial || `${d.estacion}_${d.dominio}`;
+        if (key && !deliveryMap.has(key)) {
+          deliveryMap.set(key, d);
+        }
+      });
+
+      const allDeliveries = Array.from(deliveryMap.values()).sort(
+        (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      );
+      setDeliveries(allDeliveries);
+
+      // 2. Obtener Maestro Oficial de Puntos de Entrega (Respuesta Inmediata)
+      const masterPoints = await getMasterDeliveryPoints();
+      const stationNamesList = masterPoints.map((p) => p.estacion).filter(Boolean);
+      setAvailableStations(stationNamesList);
+
+      // 3. Obtener Lotes/Recepciones de localStorage y Supabase con timeout
+      const storedBatches = localStorage.getItem('telepase_local_tag_batches');
+      if (storedBatches) {
+        try {
+          localBatches = JSON.parse(storedBatches);
+          // Auto-corregir cantidad de lote de 501 -> 500
+          let updated = false;
+          localBatches = localBatches.map((b) => {
+            if (b && b.serial_desde === '63226500' && b.serial_hasta === '63227000' && b.cantidad === 501) {
+              updated = true;
+              return { ...b, cantidad: 500 };
+            }
+            return b;
+          });
+          if (updated) {
+            localStorage.setItem('telepase_local_tag_batches', JSON.stringify(localBatches));
+          }
+        } catch {}
       }
-    } catch {}
 
-    const batchMap = new Map<string, TagBatch>();
-    [...remoteBatches, ...localBatches].forEach((b) => {
-      const key = b.id || `${b.estacion}_${b.serial_desde}_${b.serial_hasta}`;
-      if (!batchMap.has(key)) {
-        batchMap.set(key, b);
-      }
-    });
-    const allBatches = Array.from(batchMap.values());
-
-    // 4. Obtener Movimientos de Transferencias (Envíos y Recepciones)
-    let remoteTransfers: TagTransfer[] = [];
-    let localTransfers: TagTransfer[] = [];
-    const storedTransfers = localStorage.getItem('telepase_local_tag_transfers');
-    if (storedTransfers) {
+      let remoteBatches: TagBatch[] = [];
       try {
-        localTransfers = JSON.parse(storedTransfers);
+        const fetchBatches = supabase.from('tag_batches').select('*');
+        const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+        const res = await Promise.race([fetchBatches, timeoutPromise]);
+        if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+          remoteBatches = res.data;
+        }
       } catch {}
+
+      const batchMap = new Map<string, TagBatch>();
+      [...remoteBatches, ...localBatches].forEach((b) => {
+        if (!b) return;
+        const key = b.id || `${b.estacion}_${b.serial_desde}_${b.serial_hasta}`;
+        if (!batchMap.has(key)) {
+          batchMap.set(key, b);
+        }
+      });
+      const allBatches = Array.from(batchMap.values());
+
+      // 4. Obtener Movimientos de Transferencias (Envíos y Recepciones)
+      let remoteTransfers: TagTransfer[] = [];
+      let localTransfers: TagTransfer[] = [];
+      const storedTransfers = localStorage.getItem('telepase_local_tag_transfers');
+      if (storedTransfers) {
+        try {
+          localTransfers = JSON.parse(storedTransfers);
+        } catch {}
+      }
+
+      try {
+        const fetchTransfers = supabase.from('tag_transfers').select('*');
+        const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
+        const res = await Promise.race([fetchTransfers, timeoutPromise]);
+        if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
+          remoteTransfers = res.data;
+        }
+      } catch {}
+
+      const transferMap = new Map<string, TagTransfer>();
+      [...remoteTransfers, ...localTransfers].forEach((t) => {
+        if (!t) return;
+        const key = t.id || `${t.origen}_${t.destino}_${t.serial_desde}_${t.serial_hasta}`;
+        if (!transferMap.has(key)) {
+          transferMap.set(key, t);
+        }
+      });
+      const allTransfers = Array.from(transferMap.values());
+
+      const finalStocks: PeajeStock[] = masterPoints
+        .filter((pt) => pt && pt.estacion)
+        .map((pt) => {
+          const st = pt.estacion.trim();
+          const stLower = st.toLowerCase();
+
+          // Stock recibido por Alta de Lotes
+          const lotesEstacion = allBatches.filter((b) => b && b.estacion && b.estacion.trim().toLowerCase() === stLower);
+          const totalRecibidoLotes = lotesEstacion.reduce((acc, b) => acc + (Number(b.cantidad) || 0), 0);
+
+          // Stock recibido por Transferencias (confirmadas como 'Recibido')
+          const transfRecibidas = allTransfers.filter(
+            (t) => t && t.destino && t.destino.trim().toLowerCase() === stLower && t.estado === 'Recibido'
+          );
+          const totalRecibidoTransf = transfRecibidas.reduce((acc, t) => acc + (Number(t.cantidad) || 0), 0);
+
+          // Stock total acreditado a la estación
+          const totalStockRecibido = totalRecibidoLotes + totalRecibidoTransf;
+
+          // Stock enviado a otros Puntos de Entrega (En Tránsito o Recibido)
+          const transfEnviadas = allTransfers.filter(
+            (t) => t && t.origen && t.origen.trim().toLowerCase() === stLower && t.estado !== 'Cancelado'
+          );
+          const totalEnviadoTransf = transfEnviadas.reduce((acc, t) => acc + (Number(t.cantidad) || 0), 0);
+
+          // Entregados en vía a vehículos
+          const entregadosVia = allDeliveries.filter((d) => d && d.estacion && d.estacion.trim().toLowerCase() === stLower).length;
+
+          // Total salidas de la estación
+          const totalStockSalidas = entregadosVia + totalEnviadoTransf;
+
+          // Pendientes de Recepción (Transferencias enviadas a esta estación que siguen en tránsito)
+          const transfPendientesRecepcion = allTransfers.filter(
+            (t) => t && t.destino && t.destino.trim().toLowerCase() === stLower && t.estado === 'En Tránsito'
+          );
+          const totalPendientesRecepcion = transfPendientesRecepcion.reduce(
+            (acc, t) => acc + (Number(t.cantidad) || 0),
+            0
+          );
+
+          return {
+            estacion: st,
+            stock_recibido: totalStockRecibido,
+            stock_entregado: totalStockSalidas,
+            stock_minimo_alerta: pt.stock_minimo_alerta || 100,
+            pendientes_recepcion: totalPendientesRecepcion,
+            email_notificacion: pt.email_notificacion,
+          };
+        });
+
+      setStocks(finalStocks);
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
+    } finally {
+      setLoading(false);
     }
-
-    try {
-      const fetchTransfers = supabase.from('tag_transfers').select('*');
-      const timeoutPromise = new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), 1500));
-      const res = await Promise.race([fetchTransfers, timeoutPromise]);
-      if (res && res.data && Array.isArray(res.data) && res.data.length > 0) {
-        remoteTransfers = res.data;
-      }
-    } catch {}
-
-    const transferMap = new Map<string, TagTransfer>();
-    [...remoteTransfers, ...localTransfers].forEach((t) => {
-      const key = t.id || `${t.origen}_${t.destino}_${t.serial_desde}_${t.serial_hasta}`;
-      if (!transferMap.has(key)) {
-        transferMap.set(key, t);
-      }
-    });
-    const allTransfers = Array.from(transferMap.values());
-
-    const finalStocks: PeajeStock[] = masterPoints.map((pt) => {
-      const st = pt.estacion;
-      
-      // Stock recibido por Alta de Lotes
-      const lotesEstacion = allBatches.filter((b) => b.estacion.toLowerCase() === st.toLowerCase());
-      const totalRecibidoLotes = lotesEstacion.reduce((acc, b) => acc + (Number(b.cantidad) || 0), 0);
-
-      // Stock recibido por Transferencias (confirmadas como 'Recibido')
-      const transfRecibidas = allTransfers.filter((t) => t.destino.toLowerCase() === st.toLowerCase() && t.estado === 'Recibido');
-      const totalRecibidoTransf = transfRecibidas.reduce((acc, t) => acc + (Number(t.cantidad) || 0), 0);
-
-      // Stock total acreditado a la estación
-      const totalStockRecibido = totalRecibidoLotes + totalRecibidoTransf;
-
-      // Stock enviado a otros Puntos de Entrega (En Tránsito o Recibido)
-      const transfEnviadas = allTransfers.filter((t) => t.origen.toLowerCase() === st.toLowerCase() && t.estado !== 'Cancelado');
-      const totalEnviadoTransf = transfEnviadas.reduce((acc, t) => acc + (Number(t.cantidad) || 0), 0);
-
-      // Entregados en vía a vehículos
-      const entregadosVia = allDeliveries.filter((d) => d.estacion.toLowerCase() === st.toLowerCase()).length;
-
-      // Total salidas de la estación
-      const totalStockSalidas = entregadosVia + totalEnviadoTransf;
-
-      // Pendientes de Recepción (Transferencias enviadas a esta estación que siguen en tránsito)
-      const transfPendientesRecepcion = allTransfers.filter(
-        (t) => t.destino.toLowerCase() === st.toLowerCase() && t.estado === 'En Tránsito'
-      );
-      const totalPendientesRecepcion = transfPendientesRecepcion.reduce(
-        (acc, t) => acc + (Number(t.cantidad) || 0),
-        0
-      );
-
-      return {
-        estacion: st,
-        stock_recibido: totalStockRecibido,
-        stock_entregado: totalStockSalidas,
-        stock_minimo_alerta: pt.stock_minimo_alerta || 100,
-        pendientes_recepcion: totalPendientesRecepcion,
-      };
-    });
-
-    setStocks(finalStocks);
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -338,14 +354,23 @@ export default function AntigravityDashboard() {
   };
 
   // Filtrado de búsquedas
-  const filteredDeliveries = deliveries.filter((d) => {
+  const filteredDeliveries = (deliveries || []).filter((d) => {
+    if (!d) return false;
+    const term = (searchTerm || '').toLowerCase().trim();
+    const dom = (d.dominio || '').toLowerCase();
+    const tag = (d.tag_serial || '').toLowerCase();
+    const dni = (d.dni_cuit || '');
+    const nom = (d.nombre_apellido || '').toLowerCase();
+    const ope = (d.operador_runner || '').toLowerCase();
+
     const matchesSearch =
-      d.dominio.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.tag_serial.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.dni_cuit.includes(searchTerm) ||
-      (d.nombre_apellido && d.nombre_apellido.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (d.operador_runner && d.operador_runner.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+      !term ||
+      dom.includes(term) ||
+      tag.includes(term) ||
+      dni.includes(term) ||
+      nom.includes(term) ||
+      ope.includes(term);
+
     const matchesStation = selectedStation === 'Todas' || d.estacion === selectedStation;
 
     return matchesSearch && matchesStation;
